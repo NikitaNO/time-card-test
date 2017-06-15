@@ -146,7 +146,14 @@ class GeotabPage extends React.Component {
                 //         clearInterval(changeSelectOptions);
                 //     }
                 // }, 2000);
-            })
+            });
+
+            $('.ms-options').find('ul').find('li input').keyup(function(event) {
+                if(event.which === 32) {
+                    event.preventDefault();
+                }
+            });
+
             this.getAllZones()
             // self.getStartData(self.props.groups, false, true);
             self.setState({isRenderedData: true});
@@ -172,7 +179,7 @@ class GeotabPage extends React.Component {
 
     componentWillReceiveProps(nextProps){
         console.log('componentWillReceiveProps');
-        this.getAllZones()
+        // this.getAllZones()
         // this.getStartData(nextProps.groups, false, false)
     };
 
