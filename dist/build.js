@@ -21320,7 +21320,8 @@
 	    allZones = void 0,
 	    retrievedZones = void 0,
 	    dateCount = 0,
-	    isLoadedResults = true;
+	    isLoadedResults = true,
+	    isLoadedData = false;
 
 	var GeotabPage = function (_React$Component) {
 	    _inherits(GeotabPage, _React$Component);
@@ -21347,9 +21348,11 @@
 	            startDateOriginal: (0, _moment2.default)().startOf('isoWeek'),
 	            users: [],
 	            devices: [],
+	            savedTrips: [],
 	            usersMap: {},
 	            devicesMap: {},
 	            trips: null,
+	            tableTrips: null,
 	            usersLoaded: false,
 	            createdReport: false,
 	            openSettings: false,
@@ -21433,12 +21436,13 @@
 	                selectAll: true,
 	                search: true,
 	                selectAllCheckBoxes: _this.selectAllCheckBoxes,
-	                deselectAllCheckBoxes: _this.deselectAllCheckBoxes
+	                deselectAllCheckBoxes: _this.deselectAllCheckBoxes,
+	                onOptionClick: _this.onOptionClick
 	            }).on("change", function (evt) {
 
 	                var val = $(this).val();
 	                self.setState({ selectedUserIds: val });
-	                self.makeReport(true);
+	                // self.makeReport(true, false);
 
 	                // let changeSelectOptions = setInterval(() => {
 	                //     if (self.state.tripsIsLoaded) {
@@ -21447,12 +21451,6 @@
 	                //         clearInterval(changeSelectOptions);
 	                //     }
 	                // }, 2000);
-	            });
-
-	            $('.ms-options').find('ul').find('li input').keyup(function (event) {
-	                if (event.which === 32) {
-	                    event.preventDefault();
-	                }
 	            });
 
 	            _this.getAllZones
@@ -21477,7 +21475,7 @@
 	        value: function componentDidUpdate(prevProps, prevState) {
 	            if (prevState.startDate.toISOString() != this.state.startDate.toISOString() || prevState.endDate.toISOString() != this.state.endDate.toISOString()) {
 	                console.log('componentDidUpdate');
-	                this.makeReport(false
+	                this.makeReport(false, false
 	                // this.getStartData(this.state.groups, false, false)
 	                );
 	            }
@@ -21730,7 +21728,7 @@
 	                        null,
 	                        'No results.'
 	                    ) : null,
-	                    this.state.trips && isLoadedResults ? _react2.default.createElement(
+	                    this.state.tableTrips && isLoadedResults ? _react2.default.createElement(
 	                        'table',
 	                        { id: 'table_excel', style: { display: 'none', textAlign: 'center' } },
 	                        _react2.default.createElement(
@@ -21814,7 +21812,7 @@
 	                        _react2.default.createElement(
 	                            'tbody',
 	                            { className: 'table-body' },
-	                            this.state.trips.map(function (day, indexTrips) {
+	                            this.state.tableTrips.map(function (day, indexTrips) {
 	                                var isForgotToScanOut = day.driverChanges.length % 2 == 0 ? (0, _moment2.default)(day.driverChanges[day.driverChanges.length - 1].dateTime).format('h:mm:ss A') : day.today ? 'working' : 'forgot to scan';
 	                                return day.excelTableDriverChanges ? day.excelTableDriverChanges.map(function (driverChange, indexDriverChange) {
 	                                    var queryKeyIn = ['tripsHistory', 'dateRange:(startDate:\'' + driverChange[0].dateTime + '\',endDate:\'' + (0, _moment2.default)(driverChange[0].dateTime).add(3, 'minutes').toISOString() + '\')', 'devices:!(' + driverChange[0].device.id + ')'].join(',');
@@ -21847,7 +21845,7 @@
 	                                        ),
 	                                        _react2.default.createElement(
 	                                            'td',
-	                                            { className: indexTrips + 1 === _this2.state.trips.length ? 'address-td' : '',
+	                                            { className: indexTrips + 1 === _this2.state.tableTrips.length ? 'address-td' : '',
 	                                                style: { padding: '7px', backgroundColor: _this2.setBgZone(driverChange[0]) } },
 	                                            _react2.default.createElement(
 	                                                'a',
@@ -21870,7 +21868,7 @@
 	                                            _react2.default.createElement(
 	                                                'a',
 	                                                { href: driverChange[1] !== null ? 'https://' + window.location.host + '/' + timeCard.cred.database + '/#' + queryKeyOut : '', target: '_blank' },
-	                                                driverChange[1] !== null ? driverChange[1].address : ''
+	                                                driverChange[1] !== null ? driverChange[1].address : 'No Address'
 	                                            )
 	                                        ),
 	                                        _react2.default.createElement(
@@ -22154,18 +22152,113 @@
 	var _initialiseProps = function _initialiseProps() {
 	    var _this3 = this;
 
+	    this.sortUnorderedList = function (ul, sortDescending) {
+	        if (typeof ul == "string") ul = document.getElementById(ul);
+
+	        // Idiot-proof, remove if you want
+	        if (!ul) {
+	            return;
+	        }
+
+	        // Get the list items and setup an array for sorting
+	        var lis = ul.querySelectorAll("li label");
+	        var vals = [];
+
+	        // Populate the array
+	        for (var i = 0, l = lis.length; i < l; i++) {
+	            vals.push(lis[i].innerHTML);
+	        } // Sort it
+	        vals.sort();
+
+	        // Sometimes you gotta DESC
+	        if (sortDescending) vals.reverse();
+
+	        // Change the list on the page
+	        for (var i = 0, l = lis.length; i < l; i++) {
+	            lis[i].innerHTML = vals[i];
+	        }
+	    };
+
 	    this.selectAllCheckBoxes = function () {
+	        var savedTrips = _this3.state.savedTrips;
+	        var trips = _this3.state.trips;
 	        $('.ms-options').find('ul').find('li input').prop('checked', true);
 	        var val = $('select[multiple]').val();
-	        _this3.setState({ selectedUserIds: val });
-	        _this3.makeReport(true);
+	        isLoadedResults = true;
+	        if (trips.length > 0) {
+	            savedTrips.forEach(function (trip, index) {
+	                trips.splice(trip.inexInTable, 0, trip);
+	                savedTrips.splice(index, 1);
+	            });
+
+	            _this3.setState({ selectedUserIds: val });
+	            _this3.setState({
+	                savedTrips: [],
+	                trips: trips
+	            });
+	        } else {
+	            _this3.setState({ selectedUserIds: val });
+	            _this3.setState({
+	                savedTrips: [],
+	                trips: _this3.state.savedTrips
+	            });
+	        }
+	        if (_this3.state.trips.length === 0) {
+	            _this3.makeReport(true, false);
+	        }
 	    };
 
 	    this.deselectAllCheckBoxes = function () {
+	        var savedTrips = _this3.state.savedTrips;
+	        var trips = _this3.state.trips;
 	        $('.ms-options').find('ul').find('li input').prop('checked', false);
 	        var val = $('select[multiple]').val();
-	        _this3.setState({ selectedUserIds: val });
-	        _this3.makeReport(true);
+	        isLoadedResults = false;
+	        if (savedTrips.length > 0) {
+	            trips.forEach(function (trip, index) {
+	                trip.inexInTable = index;
+	                savedTrips.push(trip);
+	                trips.splice(index, 1);
+	            });
+	            _this3.setState({ selectedUserIds: val });
+	            _this3.setState({
+	                savedTrips: savedTrips,
+	                trips: []
+	            });
+	        } else {
+	            _this3.setState({ selectedUserIds: val });
+	            _this3.setState({
+	                savedTrips: _this3.state.trips,
+	                trips: []
+	            });
+	        }
+
+	        // this.makeReport(true, false);
+	    };
+
+	    this.onOptionClick = function (select, checkbox) {
+	        var savedTrips = _this3.state.savedTrips;
+	        var trips = _this3.state.trips;
+	        if ($(checkbox).is(":checked")) {
+	            savedTrips.forEach(function (trip, index) {
+	                if (trip.driverId && trip.driverId === $(checkbox).val()) {
+	                    trips.splice(trip.inexInTable, 0, trip);
+	                    savedTrips.splice(index, 1);
+	                }
+	            });
+	        } else {
+	            trips.forEach(function (trip, index) {
+	                if (trip.driverId && trip.driverId === $(checkbox).val()) {
+	                    trip.inexInTable = index;
+	                    savedTrips.push(trip);
+	                    trips.splice(index, 1);
+	                }
+	            });
+	        }
+	        _this3.setState({
+	            trips: trips,
+	            savedTrips: savedTrips
+	        });
 	    };
 
 	    this.createMap = function (day) {
@@ -22304,6 +22397,10 @@
 
 	    this.createTable = function () {
 	        _this3.setState({ isExcel: true, showLoader: true });
+	        _this3.makeReport(false, true);
+	    };
+
+	    this.downloadExcelFile = function () {
 	        var promise = new Promise(function (resolve) {
 	            setInterval(function () {
 	                if (_this3.state.isExcel) {
@@ -22326,12 +22423,12 @@
 
 	    this.loadNextDay = function () {
 	        dateCount = dateCount + 1;
-	        _this3.makeReport(false);
+	        _this3.makeReport(true, false);
 	    };
 
 	    this.loadPrevDay = function () {
 	        dateCount = dateCount > 0 ? dateCount - 1 : 0;
-	        _this3.makeReport(false);
+	        _this3.makeReport(true, false);
 	    };
 
 	    this.getAllZones = function () {
@@ -22344,15 +22441,19 @@
 	                map[obj.id] = obj;
 	                return map;
 	            });
-	            _this3.makeReport(false);
+	            _this3.makeReport(false, false);
 	        });
 	    };
 
-	    this.makeReport = function (fromChange) {
+	    this.makeReport = function (fromChange, isFullPeriod) {
 	        _this3.setState({ showLoader: true, tripsIsLoaded: false });
 	        var zoneTypeNames = retrievedZones;
 
-	        _this3.setState({ createdReport: false, trips: null });
+	        if (isFullPeriod) {
+	            _this3.setState({ createdReport: false, tableTrips: null });
+	        } else {
+	            _this3.setState({ createdReport: false, trips: null, tableTrips: null });
+	        }
 
 	        var users = [],
 	            devices = [],
@@ -22361,13 +22462,23 @@
 	            selectedUserIds = [],
 	            driverChanges = [];
 
-	        var fromDate, startDate;
+	        var fromDate, toDate;
+
+	        isLoadedData = false;
+
+	        if (isFullPeriod) {
+	            fromDate = (0, _moment2.default)(_this3.state.startDate).toISOString();
+	            toDate = (0, _moment2.default)(_this3.state.endDate).toISOString();
+	        } else {
+	            fromDate = (0, _moment2.default)(_this3.state.startDate).add(dateCount, 'days').toISOString();
+	            toDate = (0, _moment2.default)(_this3.state.startDate).add(dateCount, 'days').endOf('day').toISOString();
+	        }
 
 	        // TODO: LOGIC FROM BACKEND
 	        var calls = [['Get', { typeName: 'Device' }], ['Get', { typeName: 'User', search: { isDriver: true } }], ['Get', {
 	            typeName: 'DriverChange', search: {
-	                fromDate: (0, _moment2.default)(_this3.state.startDate).add(dateCount, 'days').toISOString(),
-	                toDate: (0, _moment2.default)(_this3.state.startDate).add(dateCount, 'days').endOf('day').toISOString()
+	                fromDate: fromDate,
+	                toDate: toDate
 	            }
 	        }], ['Get', { typeName: 'Group' }]];
 	        timeCard.api.multiCall(calls).then(function (res) {
@@ -22412,6 +22523,12 @@
 	                _this3.setState({ isExcel: true, showLoader: false });
 	                return;
 	            }
+
+	            $('.ms-options').find('ul').find('li input').keyup(function (event) {
+	                if (event.which === 32 && !isLoadedData) {
+	                    event.preventDefault();
+	                }
+	            });
 
 	            var usersMap = users.reduce(function (usersMap, user) {
 	                usersMap[user.id] = user;
@@ -22464,6 +22581,13 @@
 	                    driverChangesByDriver[_key][k].diff = 0;
 	                    driverChangesByDriver[_key][k].logs = 0;
 	                    driverChangesByDriver[_key][k].wrong = false;
+
+	                    if (!driverChangesByDriver[_key][k].driverId) {
+	                        if (driverChangesByDriver[_key][k].driverChanges.length > 0 && driverChangesByDriver[_key][k].driverChanges[0]) {
+	                            driverChangesByDriver[_key][k].driverId = driverChangesByDriver[_key][k].driverChanges[0].driver.id;
+	                        }
+	                    }
+
 	                    if (new Date(driverChangesByDriver[_key][k].driverChanges[0].dateTime).toDateString() == today.toDateString()) {
 	                        driverChangesByDriver[_key][k].today = true;
 	                    } else driverChangesByDriver[_key][k].today = false;
@@ -22502,61 +22626,222 @@
 	                }
 	            }
 
-	            // let logRecordCalls = [];
-	            //
-	            // for (let i = 0; i < trips.length; i++) {
-	            //     for (let n = 0; n < trips[i].driverChanges.length; n++) {
-	            //         let toDate = moment(trips[i].driverChanges[n].dateTime).add(15, 'minutes').toISOString();
-	            //         let query = {
-	            //             method: 'Get',
-	            //             params: {
-	            //                 typeName: 'LogRecord',
-	            //                 search: {
-	            //                     fromDate: trips[i].driverChanges[n].dateTime,
-	            //                     toDate: toDate,
-	            //                     deviceSearch: {
-	            //                         id: trips[i].driverChanges[n].device.id
-	            //                     }
-	            //                 },
-	            //                 resultLimit: 1
-	            //             }
-	            //         };
-	            //         logRecordCalls.push(query)
-	            //     }
-	            // }
-	            //
-	            // timeCard.api.call('ExecuteMultiCall', {
-	            //     calls: logRecordCalls
-	            // })
-	            //     .then(res => {
-	            //         console.log(res)
-	            //         trips.forEach((trip, index) => {
-	            //             trip.driverChanges((change, index) => {
-	            //                 trip.logRecords = res[index];
-	            //             })
-	            //         })
-	            //         console.log(trips)
-	            //     })
-	            //     .catch(err => {
-	            //         console.log(err);
-	            //     })
+	            /*
+	             *
+	             *
+	             *
+	             *
+	             *
+	             *
+	             *
+	             *
+	             * */
+	            var logRecordCalls = [];
 
+	            for (var _i = 0; _i < trips.length; _i++) {
+	                for (var n = 0; n < trips[_i].driverChanges.length; n++) {
+	                    var _toDate = (0, _moment2.default)(trips[_i].driverChanges[n].dateTime).add(15, 'minutes').toISOString();
+	                    var query = {
+	                        method: 'Get',
+	                        params: {
+	                            typeName: 'LogRecord',
+	                            search: {
+	                                fromDate: trips[_i].driverChanges[n].dateTime,
+	                                toDate: _toDate,
+	                                deviceSearch: {
+	                                    id: trips[_i].driverChanges[n].device.id
+	                                }
+	                            },
+	                            resultLimit: 1
+	                        }
+	                    };
+	                    logRecordCalls.push(query);
+	                }
+	            }
 
-	            var newTrips = [];
-	            _this3.setState({ createdReport: false, isExcel: true });
-	            _this3.recursivlyGetDistance(0, trips[0], trips, newTrips, zoneTypeNames, _this3.getDistance(trips[0], newTrips, zoneTypeNames)).then(function (result) {
-	                console.log('RESULT!!!', newTrips);
-	                for (var _i = 0; _i < newTrips.length; _i++) {
-	                    // console.log(newTrips[i]);
-	                    newTrips[_i].excelTableDriverChanges = [];
-	                    for (var m = 0; m < newTrips[_i].driverChanges.length; m++) {
-	                        if ((m + 1) % 2 !== 0) {
-	                            newTrips[_i].excelTableDriverChanges.push([newTrips[_i].driverChanges[m], newTrips[_i].driverChanges[m + 1] ? newTrips[_i].driverChanges[m + 1] : null]);
+	            timeCard.api.call('ExecuteMultiCall', {
+	                calls: logRecordCalls
+	            }).then(function (res) {
+	                console.log(res);
+	                trips.forEach(function (trip, index) {
+	                    trip.logRecords = [];
+	                    trip.driverChanges.forEach(function (change, index) {
+	                        trip.logRecords.push(res[index]);
+	                    });
+	                    res.splice(0, trip.driverChanges.length);
+	                });
+	                console.log(trips);
+
+	                var promises = [];
+	                trips.forEach(function (trip, index) {
+	                    for (var _i2 = 0; _i2 < trip.logRecords.length; _i2++) {
+	                        if (trip.logRecords[_i2]) {
+	                            var coords = trip.logRecords[_i2];
+
+	                            if (Array.isArray(trip.logRecords[_i2])) coords = trip.logRecords[_i2][0];
+
+	                            var _query = {
+	                                method: 'GetAddresses',
+	                                params: {
+	                                    coordinates: [{ "x": coords.longitude, "y": coords.latitude }],
+	                                    isMovingAddresses: true
+	                                }
+	                            };
+
+	                            promises.push(_query);
 	                        }
 	                    }
-	                }
-	                _this3.setState({ trips: newTrips, createdReport: true, showLoader: false, usersLoaded: true, isExcel: false, tripsIsLoaded: true });
-	            });
+	                });
+
+	                timeCard.api.call('ExecuteMultiCall', {
+	                    calls: promises
+	                }).then(function (res) {
+	                    console.log(res);
+
+	                    trips.forEach(function (trip, index) {
+	                        trip.addresses = [];
+	                        trip.driverChanges.forEach(function (change, index) {
+	                            trip.addresses.push(res[index]);
+	                        });
+	                        res.splice(0, trip.driverChanges.length);
+	                    });
+	                    console.log(trips);
+
+	                    trips.forEach(function (trip, tripIndex) {
+	                        if (!trip.mileageExpense) trip.mileageExpense = 0;
+	                        trip.totalHours = 0;
+
+	                        trip.driverChanges.forEach(function (change, index) {
+	                            var foundZones = [];
+	                            if (trip.addresses[index].zones) {
+	                                for (var zoneCount = 0; zoneCount < trip.addresses[index].zones.length; zoneCount++) {
+	                                    if (trip.addresses[index].zones[zoneCount].id) {
+	                                        foundZones.push(allZones);
+	                                    }
+	                                }
+	                            }
+
+	                            var isHomeZone = false;
+	                            var isCustomersZone = false;
+	                            var zoneNames = '';
+	                            if (foundZones.length > 0 && trip.addresses[index] && trip.addresses[index].zones) {
+
+	                                var zoneArray = [];
+	                                for (var _i3 = 0; _i3 < foundZones.length; _i3++) {
+	                                    zoneArray = zoneArray.concat(foundZones[_i3]);
+	                                }
+	                                for (var _n = 0; _n < zoneArray.length; _n++) {
+	                                    if (zoneArray[_n].zoneTypes.length > 0 && zoneArray[_n].zoneTypes[0] === 'ZoneTypeHomeId') {
+	                                        isHomeZone = true;
+	                                    }
+	                                }
+
+	                                if (zoneArray.length > 0) {
+	                                    zoneNames = ' / ';
+	                                    for (var zoneNameCount = 0; zoneNameCount < zoneArray.length; zoneNameCount++) {
+	                                        zoneNameCount + 1 === zoneArray.length ? zoneNames += zoneArray[zoneNameCount].name : zoneNames += zoneArray[zoneNameCount].name + ', ';
+	                                    }
+	                                } else {
+	                                    change.brokenZone = true;
+	                                }
+
+	                                for (var _i4 = 0; _i4 < trip.addresses[index].zones.length; _i4++) {
+	                                    for (var _n2 = 0; _n2 < _this3.state.customerZones.length; _n2++) {
+	                                        if (trip.addresses[index].zones[_i4].id === _this3.state.customerZones[_n2]) {
+	                                            isCustomersZone = true;
+	                                        }
+	                                    }
+	                                }
+	                                change.zones = trip.addresses[index].zones;
+	                            }
+	                            change.isCustomerZone = isCustomersZone;
+	                            change.isHomeZone = isHomeZone;
+	                            change.address = trip.addresses[index] ? trip.addresses[index][0].formattedAddress + zoneNames : 'No address';
+	                            change.googleMapsAddress = trip.addresses[index] ? trip.addresses[index][0].formattedAddress : '';
+
+	                            if (index + 1 === trip.driverChanges.length) {
+	                                if ((index + 1) % 2 === 0 && isCustomersZone) {
+	                                    trip.mileageExpense = _this3.checkDistanceForZoneWithAddresses(trip.logRecords[index].latitude, trip.logRecords[index].longitude, change, zoneTypeNames);
+	                                } else {
+	                                    if (trip.logRecords[index - 1]) {
+	                                        trip.mileageExpense = _this3.checkDistanceForZoneWithAddresses(trip.logRecords[index - 1].latitude, trip.logRecords[index - 1].longitude, change, zoneTypeNames);
+	                                    }
+	                                }
+	                            }
+	                        });
+
+	                        var changes = trip.driverChanges;
+	                        for (var _i5 = 0; _i5 < changes.length; _i5++) {
+	                            // if (changes[i].isCustomerZone) {
+	                            if (_i5 + 1 == changes.length) {
+	                                if (!trip.today) trip.totalHours += (0, _moment2.default)(changes[_i5].dateTime).endOf('day') - (0, _moment2.default)(changes[_i5].dateTime);
+	                                _i5++;
+	                            } else {
+	                                trip.totalHours += (0, _moment2.default)(changes[_i5 + 1].dateTime) - (0, _moment2.default)(changes[_i5].dateTime);
+	                                _i5++;
+	                            }
+	                            // }
+	                        }
+	                    });
+
+	                    for (var _i6 = 0; _i6 < trips.length; _i6++) {
+	                        // console.log(newTrips[i]);
+	                        trips[_i6].excelTableDriverChanges = [];
+	                        for (var m = 0; m < trips[_i6].driverChanges.length; m++) {
+	                            if ((m + 1) % 2 !== 0) {
+	                                trips[_i6].excelTableDriverChanges.push([trips[_i6].driverChanges[m], trips[_i6].driverChanges[m + 1] ? trips[_i6].driverChanges[m + 1] : null]);
+	                            }
+	                        }
+	                    }
+	                    if (isFullPeriod) {
+	                        _this3.setState({ tableTrips: trips, createdReport: true, usersLoaded: true, tripsIsLoaded: true });
+	                        _this3.downloadExcelFile();
+	                    } else {
+	                        _this3.setState({ trips: trips, createdReport: true, showLoader: false, usersLoaded: true, isExcel: false, tripsIsLoaded: true });
+	                    }
+	                    isLoadedData = true;
+	                }).catch(function (err) {
+	                    console.log(err);
+	                });
+	            }).catch(function (err) {
+	                console.log(err);
+	            }
+
+	            /*
+	             *
+	             *
+	             *
+	             *
+	             *
+	             *
+	             *
+	             * */
+
+	            // let newTrips = [];
+	            // this.setState({createdReport: false, isExcel:true});
+	            // this.recursivlyGetDistance(0, trips[0], trips, newTrips, zoneTypeNames,
+	            //     this.getDistance(trips[0], newTrips, zoneTypeNames))
+	            //     .then(result => {
+	            //         console.log('RESULT!!!', newTrips);
+	            //         for (let i = 0; i < newTrips.length; i++) {
+	            //             // console.log(newTrips[i]);
+	            //             newTrips[i].excelTableDriverChanges = [];
+	            //             for (let m = 0; m < newTrips[i].driverChanges.length; m++) {
+	            //                 if ((m + 1) % 2 !== 0) {
+	            //                     newTrips[i].excelTableDriverChanges.push([newTrips[i].driverChanges[m],
+	            //                         newTrips[i].driverChanges[m + 1] ? newTrips[i].driverChanges[m + 1] : null]);
+	            //                 }
+	            //             }
+	            //         }
+	            //         if (isFullPeriod) {
+	            //             this.setState({tableTrips:newTrips,createdReport: true, usersLoaded: true, tripsIsLoaded: true});
+	            //             this.downloadExcelFile()
+	            //         } else {
+	            //             this.setState({trips:newTrips,createdReport: true, showLoader: false, usersLoaded: true, isExcel:false, tripsIsLoaded: true});
+	            //         }
+	            //         isLoadedData = true;
+	            //     });
+	            );
 	        }
 	        // });
 	        );
@@ -22599,56 +22884,41 @@
 	            timeCard.api.multiCall(calls).then(function (res) {
 	                var promises = [];
 
-	                var coords = res[0];
+	                for (var i = 0; i < 2; i++) {
+	                    if (res[i]) {
+	                        var promise;
 
-	                if (Array.isArray(res[0])) coords = res[0][0];
+	                        (function () {
+	                            var coords = res[i];
 
-	                var promise = new Promise(function (resolve, reject) {
-	                    timeCard.api.call('GetAddresses', {
-	                        "coordinates": [{ "x": coords.longitude, "y": coords.latitude }],
-	                        "isMovingAddresses": true
-	                    }).then(function (data) {
-	                        _this3.state.promises = [];
-	                        var foundZones = [];
-	                        if (data[0].zones) {
-	                            for (var zoneCount = 0; zoneCount < data[0].zones.length; zoneCount++) {
-	                                if (allZones[data[0].zones[zoneCount].id]) {
-	                                    foundZones.push(allZones);
-	                                }
-	                                // this.comparePromises(data[0].zones[zoneCount].id);
-	                            }
-	                        }
-	                        resolve({ data: data, result: foundZones });
-	                        // this.isHomeZone()
-	                        //     .then( result => {
-	                        //         resolve({data: data, result: result});
-	                        //     })
-	                        //     .catch(err => {
-	                        //         console.log(err);
-	                        //         resolve({data: data});
-	                        //     });
-	                    }).catch(function (err) {
-	                        console.log(err);
-	                        reject(err);
-	                    });
-	                });
-	                promises.push(promise);
+	                            if (Array.isArray(res[i])) coords = res[i][0];
 
-	                // for (let m = 0; m < res.length; m++) {
-	                //     var promise;
-	                //     if(res[m].length !== 0) {
-	                //
-	                //     } else {
-	                //         promise = new Promise( (resolve, reject) => {
-	                //             timeCard.api.multiCall(calls)
-	                //                 .then( data => {
-	                //                     console.log('noLogRecord');
-	                //                     resolve();
-	                //                 })
-	                //         })
-	                //     }
-	                //
-	                // }
+	                            promise = new Promise(function (resolve, reject) {
+	                                timeCard.api.call('GetAddresses', {
+	                                    "coordinates": [{ "x": coords.longitude, "y": coords.latitude }],
+	                                    "isMovingAddresses": true
+	                                }).then(function (data) {
+	                                    _this3.state.promises = [];
+	                                    var foundZones = [];
+	                                    if (data[0].zones) {
+	                                        for (var zoneCount = 0; zoneCount < data[0].zones.length; zoneCount++) {
+	                                            if (allZones[data[0].zones[zoneCount].id]) {
+	                                                foundZones.push(allZones);
+	                                            }
+	                                        }
+	                                    }
+	                                    resolve({ data: data, result: foundZones });
+	                                }).catch(function (err) {
+	                                    console.log(err);
+	                                    reject(err);
+	                                });
+	                            });
+
+	                            promises.push(promise);
+	                        })();
+	                    }
+	                }
+
 	                // if (promise.length === 0) promises = [];
 	                Promise.all(promises).then(function (result) {
 	                    if (!day.mileageExpense) day.mileageExpense = 0;
@@ -22660,8 +22930,8 @@
 	                        var zoneNames = '';
 	                        if (result && result.length > 0 && result[index] && result[index].data[0] && result[index].data[0].zones) {
 	                            var zoneArray = [];
-	                            for (var i = 0; i < result[index].result.length; i++) {
-	                                zoneArray = zoneArray.concat(result[index].result[i]);
+	                            for (var _i7 = 0; _i7 < result[index].result.length; _i7++) {
+	                                zoneArray = zoneArray.concat(result[index].result[_i7]);
 	                            }
 	                            for (var n = 0; n < zoneArray.length; n++) {
 	                                if (zoneArray[n].zoneTypes.length > 0 && zoneArray[n].zoneTypes[0] === 'ZoneTypeHomeId') {
@@ -22678,9 +22948,9 @@
 	                                change.brokenZone = true;
 	                            }
 
-	                            for (var _i2 = 0; _i2 < result[index].data[0].zones.length; _i2++) {
-	                                for (var _n = 0; _n < _this3.state.customerZones.length; _n++) {
-	                                    if (result[index].data[0].zones[_i2].id === _this3.state.customerZones[_n]) {
+	                            for (var _i8 = 0; _i8 < result[index].data[0].zones.length; _i8++) {
+	                                for (var _n3 = 0; _n3 < _this3.state.customerZones.length; _n3++) {
+	                                    if (result[index].data[0].zones[_i8].id === _this3.state.customerZones[_n3]) {
 	                                        isCustomersZone = true;
 	                                    }
 	                                }
@@ -22714,14 +22984,14 @@
 	                    });
 
 	                    var changes = day.driverChanges;
-	                    for (var i = 0; i < changes.length; i++) {
+	                    for (var _i9 = 0; _i9 < changes.length; _i9++) {
 	                        // if (changes[i].isCustomerZone) {
-	                        if (i + 1 == changes.length) {
-	                            if (!day.today) day.totalHours += (0, _moment2.default)(changes[i].dateTime).endOf('day') - (0, _moment2.default)(changes[i].dateTime);
-	                            i++;
+	                        if (_i9 + 1 == changes.length) {
+	                            if (!day.today) day.totalHours += (0, _moment2.default)(changes[_i9].dateTime).endOf('day') - (0, _moment2.default)(changes[_i9].dateTime);
+	                            _i9++;
 	                        } else {
-	                            day.totalHours += (0, _moment2.default)(changes[i + 1].dateTime) - (0, _moment2.default)(changes[i].dateTime);
-	                            i++;
+	                            day.totalHours += (0, _moment2.default)(changes[_i9 + 1].dateTime) - (0, _moment2.default)(changes[_i9].dateTime);
+	                            _i9++;
 	                        }
 	                        // }
 	                    }

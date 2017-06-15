@@ -22,7 +22,8 @@ import FileFileDownload from 'material-ui/svg-icons/file/file-download';
 import fetchIntercept from 'fetch-intercept';
 let zone, allZones, retrievedZones,
     dateCount = 0,
-    isLoadedResults = true;
+    isLoadedResults = true,
+    isLoadedData = false;
 
 
 class GeotabPage extends React.Component {
@@ -43,9 +44,11 @@ class GeotabPage extends React.Component {
             startDateOriginal: moment().startOf('isoWeek'),
             users: [],
             devices: [],
+            savedTrips: [],
             usersMap: {},
             devicesMap: {},
             trips: null,
+            tableTrips: null,
             usersLoaded: false,
             createdReport: false,
             openSettings: false,
@@ -132,12 +135,13 @@ class GeotabPage extends React.Component {
                 selectAll: true,
                 search: true,
                 selectAllCheckBoxes: this.selectAllCheckBoxes,
-                deselectAllCheckBoxes: this.deselectAllCheckBoxes
+                deselectAllCheckBoxes: this.deselectAllCheckBoxes,
+                onOptionClick: this.onOptionClick
             }).on("change", function(evt){
 
                 var val = $(this).val();
                 self.setState({selectedUserIds: val});
-                self.makeReport(true);
+                // self.makeReport(true, false);
 
                 // let changeSelectOptions = setInterval(() => {
                 //     if (self.state.tripsIsLoaded) {
@@ -146,12 +150,6 @@ class GeotabPage extends React.Component {
                 //         clearInterval(changeSelectOptions);
                 //     }
                 // }, 2000);
-            });
-
-            $('.ms-options').find('ul').find('li input').keyup(function(event) {
-                if(event.which === 32) {
-                    event.preventDefault();
-                }
             });
 
             this.getAllZones()
@@ -164,17 +162,115 @@ class GeotabPage extends React.Component {
 
     };
 
+
+    sortUnorderedList = (ul, sortDescending) => {
+        if(typeof ul == "string")
+            ul = document.getElementById(ul);
+
+        // Idiot-proof, remove if you want
+        if(!ul) {
+            return;
+        }
+
+        // Get the list items and setup an array for sorting
+        var lis = ul.querySelectorAll("li label");
+        var vals = [];
+
+        // Populate the array
+        for(var i = 0, l = lis.length; i < l; i++)
+            vals.push(lis[i].innerHTML);
+
+        // Sort it
+        vals.sort();
+
+        // Sometimes you gotta DESC
+        if(sortDescending)
+            vals.reverse();
+
+        // Change the list on the page
+        for(var i = 0, l = lis.length; i < l; i++)
+            lis[i].innerHTML = vals[i];
+    }
+
     selectAllCheckBoxes = () => {
+        let savedTrips = this.state.savedTrips
+        let trips = this.state.trips
         $('.ms-options').find('ul').find('li input').prop('checked', true);
         var val = $('select[multiple]').val();
-        this.setState({selectedUserIds: val});
-        this.makeReport(true);
+        isLoadedResults = true;
+        if (trips.length > 0) {
+            savedTrips.forEach((trip, index) => {
+                trips.splice(trip.inexInTable, 0, trip);
+                savedTrips.splice(index, 1)
+            })
+
+            this.setState({selectedUserIds: val});
+            this.setState({
+                savedTrips: [],
+                trips: trips
+            })
+        } else {
+            this.setState({selectedUserIds: val});
+            this.setState({
+                savedTrips: [],
+                trips: this.state.savedTrips
+            })
+        }
+        if (this.state.trips.length === 0) {
+            this.makeReport(true, false);
+        }
     }
     deselectAllCheckBoxes = () => {
+        let savedTrips = this.state.savedTrips
+        let trips = this.state.trips
         $('.ms-options').find('ul').find('li input').prop('checked', false);
         var val = $('select[multiple]').val();
-        this.setState({selectedUserIds: val});
-        this.makeReport(true);
+        isLoadedResults = false;
+        if (savedTrips.length > 0) {
+            trips.forEach((trip, index) => {
+                trip.inexInTable = index;
+                savedTrips.push(trip);
+                trips.splice(index, 1)
+            })
+            this.setState({selectedUserIds: val});
+            this.setState({
+                savedTrips: savedTrips,
+                trips: []
+            })
+        } else {
+            this.setState({selectedUserIds: val});
+            this.setState({
+                savedTrips: this.state.trips,
+                trips: []
+            })
+        }
+
+        // this.makeReport(true, false);
+    }
+
+    onOptionClick = (select, checkbox) => {
+        let savedTrips = this.state.savedTrips
+        let trips = this.state.trips
+        if ($(checkbox).is(":checked")) {
+            savedTrips.forEach((trip, index) => {
+                if (trip.driverId && trip.driverId === $(checkbox).val()) {
+                    trips.splice(trip.inexInTable, 0, trip);
+                    savedTrips.splice(index, 1)
+                }
+            })
+        } else {
+            trips.forEach((trip, index) => {
+                if (trip.driverId && trip.driverId === $(checkbox).val()) {
+                    trip.inexInTable = index;
+                    savedTrips.push(trip);
+                    trips.splice(index, 1)
+                }
+            })
+        }
+        this.setState({
+            trips: trips,
+            savedTrips: savedTrips
+        })
     }
 
     componentWillReceiveProps(nextProps){
@@ -187,7 +283,7 @@ class GeotabPage extends React.Component {
         if (prevState.startDate.toISOString() != this.state.startDate.toISOString() ||
             prevState.endDate.toISOString() != this.state.endDate.toISOString()){
             console.log('componentDidUpdate');
-            this.makeReport(false)
+            this.makeReport(false, false)
             // this.getStartData(this.state.groups, false, false)
         }
     };
@@ -332,6 +428,10 @@ class GeotabPage extends React.Component {
 
     createTable = () => {
         this.setState({isExcel:true, showLoader: true});
+        this.makeReport(false, true)
+    };
+
+    downloadExcelFile = () => {
         let promise = new Promise((resolve) => {
             setInterval(() => {
                 if (this.state.isExcel){
@@ -352,17 +452,17 @@ class GeotabPage extends React.Component {
 
                 this.setState({isExcel:false, showLoader: false});
             });
-    };
+    }
 
     loadNextDay = () => {
         dateCount = dateCount + 1;
-        this.makeReport(false);
+        this.makeReport(true, false);
     };
 
 
     loadPrevDay = () => {
         dateCount = dateCount > 0 ? dateCount - 1 : 0;
-        this.makeReport(false);
+        this.makeReport(true, false);
     };
 
     getAllZones = () => {
@@ -376,30 +476,42 @@ class GeotabPage extends React.Component {
                     map[obj.id] = obj
                     return map;
                 })
-                this.makeReport(false)
+                this.makeReport(false, false)
             });
     }
 
-    makeReport = (fromChange) => {
+    makeReport = (fromChange, isFullPeriod) => {
         this.setState({showLoader: true, tripsIsLoaded: false});
         let zoneTypeNames = retrievedZones;
 
-        this.setState({createdReport:false, trips: null});
+        if (isFullPeriod) {
+            this.setState({createdReport:false, tableTrips: null});
+        } else {
+            this.setState({createdReport:false, trips: null, tableTrips: null});
+        }
 
 
         var users = [], devices = [], usersIds = [], usersForSelect = [], selectedUserIds = [], driverChanges = [];
 
-        var fromDate, startDate
+        var fromDate, toDate
 
+        isLoadedData = false;
 
+        if (isFullPeriod) {
+            fromDate = moment(this.state.startDate).toISOString()
+            toDate = moment(this.state.endDate).toISOString()
+        } else {
+            fromDate = moment(this.state.startDate).add(dateCount, 'days').toISOString()
+            toDate = moment(this.state.startDate).add(dateCount, 'days').endOf('day').toISOString()
+        }
 
         // TODO: LOGIC FROM BACKEND
         const calls = [['Get', {typeName: 'Device'}],
             ['Get', {typeName: 'User', search: {isDriver: true}}],
             ['Get', {
                 typeName: 'DriverChange', search: {
-                    fromDate: moment(this.state.startDate).add(dateCount, 'days').toISOString(),
-                    toDate: moment(this.state.startDate).add(dateCount, 'days').endOf('day').toISOString()
+                    fromDate: fromDate,
+                    toDate: toDate
                 }
             }], ['Get', {typeName: 'Group'}]];
         timeCard.api.multiCall(calls)
@@ -445,6 +557,12 @@ class GeotabPage extends React.Component {
                     this.setState({isExcel:true, showLoader: false});
                     return;
                 }
+
+                $('.ms-options').find('ul').find('li input').keyup(function (event) {
+                    if (event.which === 32 && !isLoadedData) {
+                        event.preventDefault();
+                    }
+                });
 
                 const usersMap = users.reduce((usersMap, user)=> {
                     usersMap[user.id] = user;
@@ -497,6 +615,14 @@ class GeotabPage extends React.Component {
                         driverChangesByDriver[key][k].diff = 0;
                         driverChangesByDriver[key][k].logs = 0;
                         driverChangesByDriver[key][k].wrong = false;
+
+                        if (!driverChangesByDriver[key][k].driverId) {
+                            if (driverChangesByDriver[key][k].driverChanges.length > 0 &&
+                                driverChangesByDriver[key][k].driverChanges[0]) {
+                                driverChangesByDriver[key][k].driverId = driverChangesByDriver[key][k].driverChanges[0].driver.id
+                            }
+                        }
+
                         if (new Date(driverChangesByDriver[key][k].driverChanges[0].dateTime).toDateString() == today.toDateString()) {
                             driverChangesByDriver[key][k].today = true
                         } else driverChangesByDriver[key][k].today = false;
@@ -538,65 +664,247 @@ class GeotabPage extends React.Component {
                     }
                 }
 
-                // let logRecordCalls = [];
-                //
-                // for (let i = 0; i < trips.length; i++) {
-                //     for (let n = 0; n < trips[i].driverChanges.length; n++) {
-                //         let toDate = moment(trips[i].driverChanges[n].dateTime).add(15, 'minutes').toISOString();
-                //         let query = {
-                //             method: 'Get',
-                //             params: {
-                //                 typeName: 'LogRecord',
-                //                 search: {
-                //                     fromDate: trips[i].driverChanges[n].dateTime,
-                //                     toDate: toDate,
-                //                     deviceSearch: {
-                //                         id: trips[i].driverChanges[n].device.id
-                //                     }
-                //                 },
-                //                 resultLimit: 1
-                //             }
-                //         };
-                //         logRecordCalls.push(query)
-                //     }
-                // }
-                //
-                // timeCard.api.call('ExecuteMultiCall', {
-                //     calls: logRecordCalls
-                // })
-                //     .then(res => {
-                //         console.log(res)
-                //         trips.forEach((trip, index) => {
-                //             trip.driverChanges((change, index) => {
-                //                 trip.logRecords = res[index];
-                //             })
-                //         })
-                //         console.log(trips)
-                //     })
-                //     .catch(err => {
-                //         console.log(err);
-                //     })
 
 
 
-                let newTrips = [];
-                this.setState({createdReport: false, isExcel:true});
-                this.recursivlyGetDistance(0, trips[0], trips, newTrips, zoneTypeNames,
-                    this.getDistance(trips[0], newTrips, zoneTypeNames))
-                    .then(result => {
-                        console.log('RESULT!!!', newTrips);
-                        for (let i = 0; i < newTrips.length; i++) {
-                            // console.log(newTrips[i]);
-                            newTrips[i].excelTableDriverChanges = [];
-                            for (let m = 0; m < newTrips[i].driverChanges.length; m++) {
-                                if ((m + 1) % 2 !== 0) {
-                                    newTrips[i].excelTableDriverChanges.push([newTrips[i].driverChanges[m],
-                                        newTrips[i].driverChanges[m + 1] ? newTrips[i].driverChanges[m + 1] : null]);
+                /*
+                 *
+                 *
+                 *
+                 *
+                 *
+                 *
+                 *
+                 *
+                 * */
+                let logRecordCalls = [];
+
+                for (let i = 0; i < trips.length; i++) {
+                    for (let n = 0; n < trips[i].driverChanges.length; n++) {
+                        let toDate = moment(trips[i].driverChanges[n].dateTime).add(15, 'minutes').toISOString();
+                        let query = {
+                            method: 'Get',
+                            params: {
+                                typeName: 'LogRecord',
+                                search: {
+                                    fromDate: trips[i].driverChanges[n].dateTime,
+                                    toDate: toDate,
+                                    deviceSearch: {
+                                        id: trips[i].driverChanges[n].device.id
+                                    }
+                                },
+                                resultLimit: 1
+                            }
+                        };
+                        logRecordCalls.push(query)
+                    }
+                }
+
+                timeCard.api.call('ExecuteMultiCall', {
+                    calls: logRecordCalls
+                })
+                    .then(res => {
+                        console.log(res)
+                        trips.forEach((trip, index) => {
+                            trip.logRecords = [];
+                            trip.driverChanges.forEach((change, index) => {
+                                trip.logRecords.push(res[index]);
+                            })
+                            res.splice(0, trip.driverChanges.length);
+                        })
+                        console.log(trips)
+
+                        let promises = [];
+                        trips.forEach((trip, index) => {
+                            for (let i = 0; i < trip.logRecords.length; i++) {
+                                if (trip.logRecords[i]) {
+                                    let coords = trip.logRecords[i];
+
+                                    if (Array.isArray(trip.logRecords[i])) coords = trip.logRecords[i][0];
+
+                                    let query = {
+                                        method: 'GetAddresses',
+                                        params: {
+                                            coordinates: [{"x": coords.longitude, "y": coords.latitude}],
+                                            isMovingAddresses: true
+                                        }
+                                    };
+
+                                    promises.push(query);
                                 }
                             }
-                        }
-                        this.setState({trips:newTrips,createdReport: true, showLoader: false, usersLoaded: true, isExcel:false, tripsIsLoaded: true});
-                    });
+                        })
+
+                        timeCard.api.call('ExecuteMultiCall', {
+                            calls: promises
+                        })
+                            .then(res => {
+                                console.log(res);
+
+
+                                trips.forEach((trip, index) => {
+                                    trip.addresses = [];
+                                    trip.driverChanges.forEach((change, index) => {
+                                        trip.addresses.push(res[index]);
+                                    })
+                                    res.splice(0, trip.driverChanges.length);
+                                })
+                                console.log(trips)
+
+
+                                trips.forEach((trip, tripIndex) => {
+                                    if (!trip.mileageExpense) trip.mileageExpense = 0;
+                                    trip.totalHours = 0;
+
+                                    trip.driverChanges.forEach((change, index) => {
+                                        let foundZones = [];
+                                        if (trip.addresses[index].zones) {
+                                            for (var zoneCount = 0; zoneCount < trip.addresses[index].zones.length; zoneCount++) {
+                                                if (trip.addresses[index].zones[zoneCount].id) {
+                                                    foundZones.push(allZones)
+                                                }
+                                            }
+                                        }
+
+                                        let isHomeZone = false;
+                                        let isCustomersZone = false;
+                                        let zoneNames = '';
+                                        if (foundZones.length > 0 &&
+                                            trip.addresses[index] && trip.addresses[index].zones) {
+
+                                            let zoneArray = [];
+                                            for (let i = 0; i < foundZones.length; i++) {
+                                                zoneArray = zoneArray.concat(foundZones[i]);
+                                            }
+                                            for (let n = 0; n < zoneArray.length; n++) {
+                                                if (zoneArray[n].zoneTypes.length > 0 &&
+                                                    zoneArray[n].zoneTypes[0] === 'ZoneTypeHomeId') {
+                                                    isHomeZone = true;
+                                                }
+                                            }
+
+                                            if (zoneArray.length > 0) {
+                                                zoneNames = ' / ';
+                                                for (let zoneNameCount = 0; zoneNameCount < zoneArray.length; zoneNameCount++) {
+                                                    (zoneNameCount + 1) === zoneArray.length ?
+                                                        zoneNames += zoneArray[zoneNameCount].name :
+                                                        zoneNames += zoneArray[zoneNameCount].name + ', ';
+                                                }
+                                            } else {
+                                                change.brokenZone = true;
+                                            }
+
+                                            for (let i = 0; i < trip.addresses[index].zones.length; i++) {
+                                                for (let n = 0; n < this.state.customerZones.length; n++) {
+                                                    if (trip.addresses[index].zones[i].id === this.state.customerZones[n]) {
+                                                        isCustomersZone = true;
+                                                    }
+                                                }
+                                            }
+                                            change.zones = trip.addresses[index].zones;
+                                        }
+                                        change.isCustomerZone = isCustomersZone;
+                                        change.isHomeZone = isHomeZone;
+                                        change.address = trip.addresses[index] ? trip.addresses[index][0].formattedAddress + zoneNames : 'No address';
+                                        change.googleMapsAddress = trip.addresses[index] ? trip.addresses[index][0].formattedAddress : '';
+
+
+                                        if ((index + 1) === trip.driverChanges.length) {
+                                            if ((index + 1) % 2 === 0 && isCustomersZone) {
+                                                trip.mileageExpense = this.checkDistanceForZoneWithAddresses(trip.logRecords[index].latitude,
+                                                    trip.logRecords[index].longitude, change, zoneTypeNames);
+                                            } else {
+                                                if (trip.logRecords[index - 1]) {
+                                                    trip.mileageExpense = this.checkDistanceForZoneWithAddresses(trip.logRecords[index - 1].latitude,
+                                                        trip.logRecords[index - 1].longitude, change, zoneTypeNames);
+                                                }
+                                            }
+                                        }
+
+                                    })
+
+                                    let changes = trip.driverChanges;
+                                    for (let i = 0; i < changes.length; i++) {
+                                        // if (changes[i].isCustomerZone) {
+                                        if (i + 1 == changes.length) {
+                                            if (!trip.today)
+                                                trip.totalHours += moment(changes[i].dateTime).endOf('day') - moment(changes[i].dateTime);
+                                            i++
+                                        } else {
+                                            trip.totalHours += moment(changes[i + 1].dateTime) - moment(changes[i].dateTime);
+                                            i++
+                                        }
+                                        // }
+                                    }
+
+                                })
+
+
+                                for (let i = 0; i < trips.length; i++) {
+                                    // console.log(newTrips[i]);
+                                    trips[i].excelTableDriverChanges = [];
+                                    for (let m = 0; m < trips[i].driverChanges.length; m++) {
+                                        if ((m + 1) % 2 !== 0) {
+                                            trips[i].excelTableDriverChanges.push([trips[i].driverChanges[m],
+                                                trips[i].driverChanges[m + 1] ? trips[i].driverChanges[m + 1] : null]);
+                                        }
+                                    }
+                                }
+                                if (isFullPeriod) {
+                                    this.setState({tableTrips:trips,createdReport: true, usersLoaded: true, tripsIsLoaded: true});
+                                    this.downloadExcelFile()
+                                } else {
+                                    this.setState({trips:trips,createdReport: true, showLoader: false, usersLoaded: true, isExcel:false, tripsIsLoaded: true});
+                                }
+                                isLoadedData = true;
+
+
+
+                            })
+                            .catch(err => {
+                                console.log(err);
+                            })
+                    })
+                    .catch(err => {
+                        console.log(err);
+                    })
+
+                /*
+                 *
+                 *
+                 *
+                 *
+                 *
+                 *
+                 *
+                 * */
+
+
+
+                // let newTrips = [];
+                // this.setState({createdReport: false, isExcel:true});
+                // this.recursivlyGetDistance(0, trips[0], trips, newTrips, zoneTypeNames,
+                //     this.getDistance(trips[0], newTrips, zoneTypeNames))
+                //     .then(result => {
+                //         console.log('RESULT!!!', newTrips);
+                //         for (let i = 0; i < newTrips.length; i++) {
+                //             // console.log(newTrips[i]);
+                //             newTrips[i].excelTableDriverChanges = [];
+                //             for (let m = 0; m < newTrips[i].driverChanges.length; m++) {
+                //                 if ((m + 1) % 2 !== 0) {
+                //                     newTrips[i].excelTableDriverChanges.push([newTrips[i].driverChanges[m],
+                //                         newTrips[i].driverChanges[m + 1] ? newTrips[i].driverChanges[m + 1] : null]);
+                //                 }
+                //             }
+                //         }
+                //         if (isFullPeriod) {
+                //             this.setState({tableTrips:newTrips,createdReport: true, usersLoaded: true, tripsIsLoaded: true});
+                //             this.downloadExcelFile()
+                //         } else {
+                //             this.setState({trips:newTrips,createdReport: true, showLoader: false, usersLoaded: true, isExcel:false, tripsIsLoaded: true});
+                //         }
+                //         isLoadedData = true;
+                //     });
             })
         // });
     };
@@ -639,58 +947,38 @@ class GeotabPage extends React.Component {
                 .then(res=>{
                     let promises = [];
 
-                    let coords = res[0];
+                    for (let i = 0; i < 2; i++) {
+                        if (res[i]) {
+                            let coords = res[i];
 
-                    if (Array.isArray(res[0])) coords = res[0][0];
+                            if (Array.isArray(res[i])) coords = res[i][0];
 
-                    var promise = new Promise( (resolve, reject) => {
-                        timeCard.api.call('GetAddresses', {
-                            "coordinates": [{"x": coords.longitude, "y": coords.latitude}],
-                            "isMovingAddresses": true
-                        })
-                            .then( data => {
-                                this.state.promises = [];
-                                let foundZones = [];
-                                if (data[0].zones) {
-                                    for (var zoneCount = 0; zoneCount < data[0].zones.length; zoneCount++) {
-                                        if (allZones[data[0].zones[zoneCount].id]) {
-                                            foundZones.push(allZones)
+                            var promise = new Promise( (resolve, reject) => {
+                                timeCard.api.call('GetAddresses', {
+                                    "coordinates": [{"x": coords.longitude, "y": coords.latitude}],
+                                    "isMovingAddresses": true
+                                })
+                                    .then( data => {
+                                        this.state.promises = [];
+                                        let foundZones = [];
+                                        if (data[0].zones) {
+                                            for (var zoneCount = 0; zoneCount < data[0].zones.length; zoneCount++) {
+                                                if (allZones[data[0].zones[zoneCount].id]) {
+                                                    foundZones.push(allZones)
+                                                }
+                                            }
                                         }
-                                        // this.comparePromises(data[0].zones[zoneCount].id);
-                                    }
-                                }
-                                resolve({data: data, result: foundZones});
-                                // this.isHomeZone()
-                                //     .then( result => {
-                                //         resolve({data: data, result: result});
-                                //     })
-                                //     .catch(err => {
-                                //         console.log(err);
-                                //         resolve({data: data});
-                                //     });
-                            })
-                            .catch(err => {
-                                console.log(err);
-                                reject(err);
+                                        resolve({data: data, result: foundZones});
+                                    })
+                                    .catch(err => {
+                                        console.log(err);
+                                        reject(err);
+                                    });
                             });
-                    });
-                    promises.push(promise);
+                            promises.push(promise);
+                        }
+                    }
 
-                    // for (let m = 0; m < res.length; m++) {
-                    //     var promise;
-                    //     if(res[m].length !== 0) {
-                    //
-                    //     } else {
-                    //         promise = new Promise( (resolve, reject) => {
-                    //             timeCard.api.multiCall(calls)
-                    //                 .then( data => {
-                    //                     console.log('noLogRecord');
-                    //                     resolve();
-                    //                 })
-                    //         })
-                    //     }
-                    //
-                    // }
                     // if (promise.length === 0) promises = [];
                     Promise.all(promises)
                         .then( result => {
@@ -767,14 +1055,14 @@ class GeotabPage extends React.Component {
                             let changes = day.driverChanges;
                             for (let i = 0; i < changes.length; i++) {
                                 // if (changes[i].isCustomerZone) {
-                                    if (i + 1 == changes.length) {
-                                        if (!day.today)
-                                            day.totalHours += moment(changes[i].dateTime).endOf('day') - moment(changes[i].dateTime);
-                                        i++
-                                    } else {
-                                        day.totalHours += moment(changes[i + 1].dateTime) - moment(changes[i].dateTime);
-                                        i++
-                                    }
+                                if (i + 1 == changes.length) {
+                                    if (!day.today)
+                                        day.totalHours += moment(changes[i].dateTime).endOf('day') - moment(changes[i].dateTime);
+                                    i++
+                                } else {
+                                    day.totalHours += moment(changes[i + 1].dateTime) - moment(changes[i].dateTime);
+                                    i++
+                                }
                                 // }
                             }
                             console.log(day.totalHours);
@@ -1327,7 +1615,7 @@ class GeotabPage extends React.Component {
                         </table>: null}
 
                     {!isLoadedResults ? <p>No results.</p> : null}
-                    {this.state.trips && isLoadedResults ?
+                    {this.state.tableTrips && isLoadedResults ?
                         <table id = 'table_excel' style = {{display: 'none',textAlign: 'center'}}>
                             <thead style = {{textAlign: 'center'}}>
                             <tr className="table-head">
@@ -1348,7 +1636,7 @@ class GeotabPage extends React.Component {
                             </tr>
                             </thead>
                             <tbody className="table-body">
-                            {this.state.trips.map((day, indexTrips) => {
+                            {this.state.tableTrips.map((day, indexTrips) => {
                                 let isForgotToScanOut = day.driverChanges.length % 2 == 0 ?
                                     moment(day.driverChanges[day.driverChanges.length-1].dateTime).format('h:mm:ss A'):
                                     day.today ? 'working' : 'forgot to scan';
@@ -1373,7 +1661,7 @@ class GeotabPage extends React.Component {
                                         <td style = {{padding: '7px', cursor:'pointer', color:'blue'}}>
                                             {day.logs}
                                         </td>
-                                        <td className={ indexTrips + 1 === this.state.trips.length ? 'address-td' : '' }
+                                        <td className={ indexTrips + 1 === this.state.tableTrips.length ? 'address-td' : '' }
                                             style = {{padding: '7px', backgroundColor: this.setBgZone(driverChange[0])}}>
                                             <a href={'https://' + window.location.host + '/' + timeCard.cred.database +
                                             '/#' + queryKeyIn} target="_blank">{driverChange[0].address ? driverChange[0].address : ''}</a>
@@ -1383,7 +1671,7 @@ class GeotabPage extends React.Component {
                                         </td>
                                         <td style = {{padding: '7px', backgroundColor: this.setBgZone(driverChange[1])}}>
                                             <a href={driverChange[1] !== null ? 'https://' + window.location.host + '/' + timeCard.cred.database +
-                                            '/#' + queryKeyOut : ''} target="_blank">{driverChange[1] !== null ? driverChange[1].address : ''}</a>
+                                            '/#' + queryKeyOut : ''} target="_blank">{driverChange[1] !== null ? driverChange[1].address : 'No Address'}</a>
                                         </td>
                                         <td style = {driverChange[1] !== null ? {padding: '7px'} : day.today ? {background: '#f4f442', padding: '7px'} :
                                         {background: '#f44242', padding: '7px'}}>
