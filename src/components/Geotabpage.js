@@ -1,7 +1,7 @@
 import React from 'react';
 import moment from 'moment';
 import { Button } from 'react-bootstrap';
-const BS = require('react-bootstrap');
+import { Glyphicon } from 'react-bootstrap';
 import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider';
 import {Table, TableBody, TableHeader, TableHeaderColumn, TableRow, TableRowColumn} from 'material-ui/Table';
 import TextField from 'material-ui/TextField';
@@ -1495,7 +1495,7 @@ class GeotabPage extends React.Component {
                         <DateRangePicker style = {{width: '230px', display: 'inline-block'}} startDate={this.state.startDate} endDate={this.state.endDate}
                                          ranges={this.state.ranges} onEvent={this.handleEvent}>
                             <Button className="selected-date-range-btn" style={{width:'100%'}}>
-                                <div className="pull-left"><BS.Glyphicon glyph="calendar" /></div>
+                                <div className="pull-left"><Glyphicon glyph="calendar" /></div>
                                 <div className="pull-right">
 									<span>
 										{label}
