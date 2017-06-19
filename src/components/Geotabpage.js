@@ -183,7 +183,7 @@ class GeotabPage extends React.Component {
         
         let selectedUserIds = this.getSelectedDrivers();
         
-        let trips = _.cloneDeep(this.state.savedTrips);
+        let trips = _.cloneDeep(this.state.savedTrips || []);
     
         this.setState({
             selectedUserIds,
@@ -218,7 +218,7 @@ class GeotabPage extends React.Component {
      * data of selected drivers
      */
     displayOnlySelectedDrivers = () => {
-        let savedTrips = this.state.savedTrips;
+        let savedTrips = this.state.savedTrips || [];
     
         let selectedUserIds = this.getSelectedDrivers();
     
