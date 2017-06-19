@@ -1,6 +1,7 @@
 import React from 'react';
 import moment from 'moment';
 import { Button } from 'react-bootstrap';
+const BS = require('react-bootstrap');
 import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider';
 import {Table, TableBody, TableHeader, TableHeaderColumn, TableRow, TableRowColumn} from 'material-ui/Table';
 import TextField from 'material-ui/TextField';
