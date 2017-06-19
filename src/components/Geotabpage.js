@@ -1,17 +1,24 @@
+import _  from 'lodash';
 import React from 'react';
 import moment from 'moment';
+import Dialog from 'material-ui/Dialog';
+import TextField from 'material-ui/TextField';
 import { Button, Glyphicon } from 'react-bootstrap';
 import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider';
-import {Table, TableBody, TableHeader, TableHeaderColumn, TableRow, TableRowColumn} from 'material-ui/Table';
-import TextField from 'material-ui/TextField';
-import Dialog from 'material-ui/Dialog';
-import _  from 'lodash';
 import DateRangePicker from 'react-bootstrap-daterangepicker';
 import RaisedButton from 'material-ui/RaisedButton';
 import Snackbar from 'material-ui/Snackbar';
 import Checkbox from 'material-ui/Checkbox';
 import SelectField from 'material-ui/SelectField';
 import MenuItem from 'material-ui/MenuItem';
+import {
+    Table,
+    TableBody,
+    TableHeader,
+    TableHeaderColumn,
+    TableRow,
+    TableRowColumn
+} from 'material-ui/Table';
 
 let zone, allZones, retrievedZones,
     dateCount = 0,
@@ -171,7 +178,7 @@ class GeotabPage extends React.Component {
      * @returns {*|jQuery} returns array of drivers ids
      */
     getSelectedDrivers = () => {
-        return $('select[multiple]').val()
+        return $('select[multiple]').val() || [];
     };
     
     /**
