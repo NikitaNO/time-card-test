@@ -1721,7 +1721,7 @@ class GeotabPage extends React.Component {
                                 return <MenuItem value={index} primaryText={zone.name} />
                             })}
                         </SelectField>
-                        <TextField style = {{paddingLeft:'10px'}}
+                        <TextField style = {{paddingLeft:'10px', top: '-17px;'}}
                                    floatingLabelText="Per mile rate (min/km)"
                                    floatingLabelFixed={true}
                                    onChange={(e)=> this.setState({mileRate:e.target.value})}
