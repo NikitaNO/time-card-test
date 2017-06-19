@@ -1,13 +1,12 @@
 import React from 'react';
 import moment from 'moment';
-import { Button } from 'react-bootstrap';
-import { Glyphicon } from 'react-bootstrap';
+import { Button, Glyphicon } from 'react-bootstrap';
 import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider';
 import {Table, TableBody, TableHeader, TableHeaderColumn, TableRow, TableRowColumn} from 'material-ui/Table';
 import TextField from 'material-ui/TextField';
 import Dialog from 'material-ui/Dialog';
-var _ = require('lodash');
-var DateRangePicker = require('react-bootstrap-daterangepicker');
+import _  from 'lodash';
+import DateRangePicker from 'react-bootstrap-daterangepicker';
 import RaisedButton from 'material-ui/RaisedButton';
 import Snackbar from 'material-ui/Snackbar';
 import Checkbox from 'material-ui/Checkbox';
@@ -828,15 +827,17 @@ class GeotabPage extends React.Component {
                                         tripsIsLoaded: true
                                     });
                                 }
-                                isLoadedData = true;
+                                onDataLoaded();
 
                             })
                             .catch(err => {
                                 console.log(err);
+                                onDataLoaded();
                             })
                     })
                     .catch(err => {
                         console.log(err);
+                        onDataLoaded();
                     })
 
                 /*
@@ -876,7 +877,6 @@ class GeotabPage extends React.Component {
                 //         isLoadedData = true;
                 //     });
             })
-            .final(onDataLoaded);
         // });
     
         function onDataLoaded(){
