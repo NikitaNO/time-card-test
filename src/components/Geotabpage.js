@@ -210,16 +210,24 @@ class GeotabPage extends React.Component {
      * Method on click to select one driver in multiselect
      */
     onOptionClick = () => {
+        this.displayOnlySelectedDrivers()
+    };
+    
+    /**
+     * Method need for update from saved trips object
+     * data of selected drivers
+     */
+    displayOnlySelectedDrivers = () => {
         let savedTrips = this.state.savedTrips;
-        
+    
         let selectedUserIds = this.getSelectedDrivers();
-        
+    
         function filterDriverInTrips(trip){
             return selectedUserIds.indexOf(trip.driverId) !== -1;
         }
-        
+    
         let trips = _.filter(savedTrips, filterDriverInTrips);
-        
+    
         this.setState({
             trips,
             selectedUserIds
