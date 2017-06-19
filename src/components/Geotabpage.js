@@ -1,25 +1,18 @@
-import React from 'react'
-import moment from 'moment'
-var BS = require('react-bootstrap');
+import React from 'react';
+import moment from 'moment';
 import { Button } from 'react-bootstrap';
 import MuiThemeProvider from 'material-ui/styles/MuiThemeProvider';
 import {Table, TableBody, TableHeader, TableHeaderColumn, TableRow, TableRowColumn} from 'material-ui/Table';
-import {List, ListItem} from 'material-ui/List';
 import TextField from 'material-ui/TextField';
 import Dialog from 'material-ui/Dialog';
-import CircularProgress from 'material-ui/CircularProgress';
-var _ = require('underscore');
+var _ = require('lodash');
 var DateRangePicker = require('react-bootstrap-daterangepicker');
 import RaisedButton from 'material-ui/RaisedButton';
 import Snackbar from 'material-ui/Snackbar';
 import Checkbox from 'material-ui/Checkbox';
 import SelectField from 'material-ui/SelectField';
-import DropDownMenu from 'material-ui/DropDownMenu';
 import MenuItem from 'material-ui/MenuItem';
-import IconButton from 'material-ui/IconButton';
-import IconMenu from 'material-ui/IconMenu';
-import FileFileDownload from 'material-ui/svg-icons/file/file-download';
-import fetchIntercept from 'fetch-intercept';
+
 let zone, allZones, retrievedZones,
     dateCount = 0,
     isLoadedResults = true,
