@@ -15,7 +15,6 @@ import MenuItem from 'material-ui/MenuItem';
 
 let zone, allZones, retrievedZones,
     dateCount = 0,
-    isLoadedResults = true,
     isLoadedData = false;
 
 
@@ -154,117 +153,78 @@ class GeotabPage extends React.Component {
     componentDidMount(){
 
     };
-
-
-    sortUnorderedList = (ul, sortDescending) => {
-        if(typeof ul == "string")
-            ul = document.getElementById(ul);
-
-        // Idiot-proof, remove if you want
-        if(!ul) {
-            return;
-        }
-
-        // Get the list items and setup an array for sorting
-        var lis = ul.querySelectorAll("li label");
-        var vals = [];
-
-        // Populate the array
-        for(var i = 0, l = lis.length; i < l; i++)
-            vals.push(lis[i].innerHTML);
-
-        // Sort it
-        vals.sort();
-
-        // Sometimes you gotta DESC
-        if(sortDescending)
-            vals.reverse();
-
-        // Change the list on the page
-        for(var i = 0, l = lis.length; i < l; i++)
-            lis[i].innerHTML = vals[i];
-    }
-
+    
+    
+    /**
+     * Set checkboxes in multiselect to needed value
+     * @param checkboxesValue {Boolean}
+     */
+    setCheckboxesIn = (checkboxesValue) => {
+        $('.ms-options')
+            .find('ul')
+            .find('li input')
+            .prop('checked', checkboxesValue);
+    };
+    
+    /**
+     * Method to get selected drivers
+     * @returns {*|jQuery} returns array of drivers ids
+     */
+    getSelectedDrivers = () => {
+        return $('select[multiple]').val()
+    };
+    
+    /**
+     * Select all drivers in multiselect
+     */
     selectAllCheckBoxes = () => {
-        let savedTrips = this.state.savedTrips
-        let trips = this.state.trips
-        $('.ms-options').find('ul').find('li input').prop('checked', true);
-        var val = $('select[multiple]').val();
-        isLoadedResults = true;
-        if (trips.length > 0) {
-            savedTrips.forEach((trip, index) => {
-                trips.splice(trip.inexInTable, 0, trip);
-                savedTrips.splice(index, 1)
-            })
-
-            this.setState({selectedUserIds: val});
-            this.setState({
-                savedTrips: [],
-                trips: trips
-            })
-        } else {
-            this.setState({selectedUserIds: val});
-            this.setState({
-                savedTrips: [],
-                trips: this.state.savedTrips
-            })
-        }
-        if (this.state.trips.length === 0) {
-            this.makeReport(true, false);
-        }
-    }
-    deselectAllCheckBoxes = () => {
-        let savedTrips = this.state.savedTrips
-        let trips = this.state.trips
-        $('.ms-options').find('ul').find('li input').prop('checked', false);
-        var val = $('select[multiple]').val();
-        isLoadedResults = false;
-        if (savedTrips.length > 0) {
-            trips.forEach((trip, index) => {
-                trip.inexInTable = index;
-                savedTrips.push(trip);
-                trips.splice(index, 1)
-            })
-            this.setState({selectedUserIds: val});
-            this.setState({
-                savedTrips: savedTrips,
-                trips: []
-            })
-        } else {
-            this.setState({selectedUserIds: val});
-            this.setState({
-                savedTrips: this.state.trips,
-                trips: []
-            })
-        }
-
-        // this.makeReport(true, false);
-    }
-
-    onOptionClick = (select, checkbox) => {
-        let savedTrips = this.state.savedTrips
-        let trips = this.state.trips
-        if ($(checkbox).is(":checked")) {
-            savedTrips.forEach((trip, index) => {
-                if (trip.driverId && trip.driverId === $(checkbox).val()) {
-                    trips.splice(trip.inexInTable, 0, trip);
-                    savedTrips.splice(index, 1)
-                }
-            })
-        } else {
-            trips.forEach((trip, index) => {
-                if (trip.driverId && trip.driverId === $(checkbox).val()) {
-                    trip.inexInTable = index;
-                    savedTrips.push(trip);
-                    trips.splice(index, 1)
-                }
-            })
-        }
+        
+        this.setCheckboxesIn(true);
+        
+        let selectedUserIds = this.getSelectedDrivers();
+        
+        let trips = _.cloneDeep(this.state.savedTrips);
+    
         this.setState({
-            trips: trips,
-            savedTrips: savedTrips
-        })
-    }
+            selectedUserIds,
+            trips
+        });
+    };
+    
+    /**
+     * Deselect all drivers from multiselect
+     */
+    deselectAllCheckBoxes = () => {
+        
+        this.setCheckboxesIn(false);
+        
+        let selectedUserIds = this.getSelectedDrivers();
+        
+        this.setState({
+            selectedUserIds,
+            trips: []
+        });
+    };
+    
+    /**
+     * Method on click to select one driver in multiselect
+     */
+    onOptionClick = () => {
+        let savedTrips = this.state.savedTrips;
+        
+        let selectedUserIds = this.getSelectedDrivers();
+        
+        function filterDriverInTrips(trip){
+            return selectedUserIds.indexOf(trip.driverId) !== -1;
+        }
+        
+        let trips = _.filter(savedTrips, filterDriverInTrips);
+        
+        this.setState({
+            trips,
+            selectedUserIds
+        });
+    };
 
     componentWillReceiveProps(nextProps){
         console.log('componentWillReceiveProps');
@@ -499,23 +459,26 @@ class GeotabPage extends React.Component {
         }
 
         // TODO: LOGIC FROM BACKEND
-        const calls = [['Get', {typeName: 'Device'}],
-            ['Get', {typeName: 'User', search: {isDriver: true}}],
+        const calls = [
+            ['Get', {typeName: 'Device'}],
+            ['Get', {
+                typeName: 'User', search: {isDriver: true}
+            }],
             ['Get', {
                 typeName: 'DriverChange', search: {
                     fromDate: fromDate,
                     toDate: toDate
                 }
-            }], ['Get', {typeName: 'Group'}]];
+            }],
+            ['Get', {typeName: 'Group'}]
+        ];
         timeCard.api.multiCall(calls)
             .then(res => {
                 devices = res[0];
                 users = res[1];
                 driverChanges = res[2];
-                isLoadedResults = true;
-
+                
                 if (driverChanges.length === 0) {
-                    isLoadedResults = false;
                     this.setState({isExcel:true, showLoader: false});
                     return;
                 }
@@ -546,7 +509,6 @@ class GeotabPage extends React.Component {
                 }
 
                 if (selectedUserIds === null) {
-                    isLoadedResults = false;
                     this.setState({isExcel:true, showLoader: false});
                     return;
                 }
@@ -840,14 +802,24 @@ class GeotabPage extends React.Component {
                                     }
                                 }
                                 if (isFullPeriod) {
-                                    this.setState({tableTrips:trips,createdReport: true, usersLoaded: true, tripsIsLoaded: true});
+                                    this.setState({
+                                        tableTrips:trips,
+                                        createdReport: true,
+                                        usersLoaded: true,
+                                        tripsIsLoaded: true
+                                    });
                                     this.downloadExcelFile()
                                 } else {
-                                    this.setState({trips:trips,createdReport: true, showLoader: false, usersLoaded: true, isExcel:false, tripsIsLoaded: true});
+                                    this.setState({
+                                        trips,
+                                        createdReport: true,
+                                        showLoader: false,
+                                        usersLoaded: true,
+                                        isExcel:false,
+                                        tripsIsLoaded: true
+                                    });
                                 }
                                 isLoadedData = true;
-
-
 
                             })
                             .catch(err => {
@@ -895,7 +867,12 @@ class GeotabPage extends React.Component {
                 //         isLoadedData = true;
                 //     });
             })
+            .final(onDataLoaded);
         // });
+    
+        function onDataLoaded(){
+            isLoadedData = true;
+        }
     };
 
     recursivlyGetDistance = (index, driver, drivers, newTrips, zoneTypeNames, promise) => {
@@ -1533,7 +1510,7 @@ class GeotabPage extends React.Component {
                                       label = 'Next Day'
                                       onClick = {() => this.loadNextDay()}/>
                     </div>
-                    {this.state.trips && isLoadedResults ?
+                    {this.state.trips.length ?
                         <table id = 'table' style = {this.state.isExcel ? {display: 'none',textAlign: 'center'}: {display:'table',textAlign: 'center'}}>
                             <thead style = {{textAlign: 'center'}}>
                             <tr className="table-head">
@@ -1603,8 +1580,8 @@ class GeotabPage extends React.Component {
                             </tbody>
                         </table>: null}
 
-                    {!isLoadedResults ? <p>No results.</p> : null}
-                    {this.state.tableTrips && isLoadedResults ?
+                    {!this.state.trips.length && isLoadedData ? <p>No results.</p> : null}
+                    {this.state.tableTrips.length ?
                         <table id = 'table_excel' style = {{display: 'none',textAlign: 'center'}}>
                             <thead style = {{textAlign: 'center'}}>
                             <tr className="table-head">
