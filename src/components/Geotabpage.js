@@ -716,23 +716,22 @@ class GeotabPage extends React.Component {
 
                         let promises = [];
                         trips.forEach((trip, index) => {
+                            let coordinates = [];
                             for (let i = 0; i < trip.logRecords.length; i++) {
                                 if (trip.logRecords[i]) {
                                     let coords = trip.logRecords[i];
-
                                     if (Array.isArray(trip.logRecords[i])) coords = trip.logRecords[i][0];
-
-                                    let query = {
-                                        method: 'GetAddresses',
-                                        params: {
-                                            coordinates: [{"x": coords.longitude, "y": coords.latitude}],
-                                            isMovingAddresses: true
-                                        }
-                                    };
-
-                                    promises.push(query);
+                                    coordinates.push({"x": coords.longitude, "y": coords.latitude});
                                 }
                             }
+                            let query = {
+                                method: 'GetAddresses',
+                                params: {
+                                    coordinates: coordinates,
+                                    isMovingAddresses: true
+                                }
+                            };
+                            promises.push(query);
                         })
 
                         timeCard.api.call('ExecuteMultiCall', {
@@ -743,11 +742,8 @@ class GeotabPage extends React.Component {
 
 
                                 trips.forEach((trip, index) => {
-                                    trip.addresses = [];
-                                    trip.driverChanges.forEach((change, index) => {
-                                        trip.addresses.push(res[index]);
-                                    })
-                                    res.splice(0, trip.driverChanges.length);
+                                    trip.addresses = res[index];
+                                    // res.splice(0, trip.driverChanges.length);
                                 })
                                 console.log(trips)
 
@@ -805,8 +801,8 @@ class GeotabPage extends React.Component {
                                         }
                                         change.isCustomerZone = isCustomersZone;
                                         change.isHomeZone = isHomeZone;
-                                        change.address = trip.addresses[index] ? trip.addresses[index][0].formattedAddress + zoneNames : 'No address';
-                                        change.googleMapsAddress = trip.addresses[index] ? trip.addresses[index][0].formattedAddress : '';
+                                        change.address = trip.addresses[index] ? trip.addresses[index].formattedAddress + zoneNames : 'No address';
+                                        change.googleMapsAddress = trip.addresses[index] ? trip.addresses[index].formattedAddress : '';
 
 
                                         if ((index + 1) === trip.driverChanges.length) {

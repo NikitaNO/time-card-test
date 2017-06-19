@@ -22674,23 +22674,22 @@
 
 	                var promises = [];
 	                trips.forEach(function (trip, index) {
+	                    var coordinates = [];
 	                    for (var _i2 = 0; _i2 < trip.logRecords.length; _i2++) {
 	                        if (trip.logRecords[_i2]) {
 	                            var coords = trip.logRecords[_i2];
-
 	                            if (Array.isArray(trip.logRecords[_i2])) coords = trip.logRecords[_i2][0];
-
-	                            var _query = {
-	                                method: 'GetAddresses',
-	                                params: {
-	                                    coordinates: [{ "x": coords.longitude, "y": coords.latitude }],
-	                                    isMovingAddresses: true
-	                                }
-	                            };
-
-	                            promises.push(_query);
+	                            coordinates.push({ "x": coords.longitude, "y": coords.latitude });
 	                        }
 	                    }
+	                    var query = {
+	                        method: 'GetAddresses',
+	                        params: {
+	                            coordinates: coordinates,
+	                            isMovingAddresses: true
+	                        }
+	                    };
+	                    promises.push(query);
 	                });
 
 	                timeCard.api.call('ExecuteMultiCall', {
@@ -22699,11 +22698,8 @@
 	                    console.log(res);
 
 	                    trips.forEach(function (trip, index) {
-	                        trip.addresses = [];
-	                        trip.driverChanges.forEach(function (change, index) {
-	                            trip.addresses.push(res[index]);
-	                        });
-	                        res.splice(0, trip.driverChanges.length);
+	                        trip.addresses = res[index];
+	                        // res.splice(0, trip.driverChanges.length);
 	                    });
 	                    console.log(trips);
 
@@ -22756,8 +22752,8 @@
 	                            }
 	                            change.isCustomerZone = isCustomersZone;
 	                            change.isHomeZone = isHomeZone;
-	                            change.address = trip.addresses[index] ? trip.addresses[index][0].formattedAddress + zoneNames : 'No address';
-	                            change.googleMapsAddress = trip.addresses[index] ? trip.addresses[index][0].formattedAddress : '';
+	                            change.address = trip.addresses[index] ? trip.addresses[index].formattedAddress + zoneNames : 'No address';
+	                            change.googleMapsAddress = trip.addresses[index] ? trip.addresses[index].formattedAddress : '';
 
 	                            if (index + 1 === trip.driverChanges.length) {
 	                                if ((index + 1) % 2 === 0 && isCustomersZone) {
