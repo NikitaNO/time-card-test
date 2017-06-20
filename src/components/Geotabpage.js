@@ -311,48 +311,47 @@ class GeotabPage extends React.Component {
             };
             calls.push(["Get", query])
         });
-        timeCard.api.multiCall(calls).
-        then(res=>{
-            this.setState({openMap:true})
-            setTimeout(() => {
-                let text = '';
-                let self = this;
-                let baseLayer = L.tileLayer("https://{s}.tiles.mapbox.com/v3/geotab.i8d8afbp/{z}/{x}/{y}.png");
-
-                self.map = new L.Map("keymap", {
-                    center: new L.LatLng(43.434497, -79.709441),
-                    zoom: 9,
-                    layers: [baseLayer]
-                });
-                let textArray = [];
-                for (let i = 0; i < res.length; i++) {
-                    if (res[i].length === 0) return;
-                    if (res[i].length === 1) res[i] = res[i][0];
-                    if ((i + 1) % 2 === 0) {
-                        text = `KO-${Math.ceil((i + 1) / 2)} ${moment(res[i].dateTime).format('h:mm:ss A')}`
-                    } else {
-                        text = `KI-${Math.ceil((i + 1) / 2)} ${moment(res[i].dateTime).format('h:mm:ss A')}`
-                    }
-                    textArray.push(text);
-                    let marker = L.marker([res[i].latitude, res[i].longitude], {
-                        icon: new LeafIcon({number: i + 1, iconUrl: 'https://storage.googleapis.com/time-card/map-marker.png'})
+        timeCard.api.multiCall(calls)
+            .then(res => {
+                this.setState({openMap:true});
+                setTimeout(() => {
+                    let text = '';
+                    let self = this;
+                    let baseLayer = L.tileLayer("https://{s}.tiles.mapbox.com/v3/geotab.i8d8afbp/{z}/{x}/{y}.png");
+    
+                    self.map = new L.Map("keymap", {
+                        center: new L.LatLng(43.434497, -79.709441),
+                        zoom: 9,
+                        layers: [baseLayer]
                     });
-                    // let marker = L.marker([res[i].latitude, res[i].longitude]).bindLabel(text, {noHide: true });
-                    // marker.addTo(self.map);
-                }
-                this.showInfo(day, text, res, self.map, LeafIcon, textArray);
-                if (res.length !== 0) {
-                    let markers = res.map(change => {
-                        if(change.length) change = change[0];
-                        return [change.latitude, change.longitude]
-                    })
-                    const bounds = L.latLngBounds(markers);
-                    self.map.fitBounds(bounds);
-                }
-                $('.map_dialog').children().children().addClass('map_dialog_content');
-            },0)
-
-        });
+                    let textArray = [];
+                    for (let i = 0; i < res.length; i++) {
+                        if (res[i].length === 0) return;
+                        if (res[i].length === 1) res[i] = res[i][0];
+                        if ((i + 1) % 2 === 0) {
+                            text = `KO-${Math.ceil((i + 1) / 2)} ${moment(res[i].dateTime).format('h:mm:ss A')}`
+                        } else {
+                            text = `KI-${Math.ceil((i + 1) / 2)} ${moment(res[i].dateTime).format('h:mm:ss A')}`
+                        }
+                        textArray.push(text);
+                        let marker = L.marker([res[i].latitude, res[i].longitude], {
+                            icon: new LeafIcon({number: i + 1, iconUrl: 'https://storage.googleapis.com/time-card/map-marker.png'})
+                        });
+                        // let marker = L.marker([res[i].latitude, res[i].longitude]).bindLabel(text, {noHide: true });
+                        // marker.addTo(self.map);
+                    }
+                    this.showInfo(day, text, res, self.map, LeafIcon, textArray);
+                    if (res.length !== 0) {
+                        let markers = res.map(change => {
+                            if(change.length) change = change[0];
+                            return [change.latitude, change.longitude]
+                        });
+                        const bounds = L.latLngBounds(markers);
+                        self.map.fitBounds(bounds);
+                    }
+                    $('.map_dialog').children().children().addClass('map_dialog_content');
+                })
+            });
     };
 
     getSettings = () => {
@@ -368,7 +367,8 @@ class GeotabPage extends React.Component {
                     if (arr.reportName && arr.reportName === this.reportName) return true
                 });
                 if (settings.length) {
-                    this.setState({weekHours: settings[0].options.weekHours,
+                    this.setState({
+                        weekHours: settings[0].options.weekHours,
                         dayHours: settings[0].options.dayHours,
                         lunchTime: settings[0].options.lunchTime,
                         weekEmails: settings[0].sendingPeriod.week.join(';'),
@@ -446,7 +446,7 @@ class GeotabPage extends React.Component {
                 })
                 this.makeReport(false, false)
             });
-    }
+    };
 
     makeReport = (fromChange, isFullPeriod) => {
         this.setState({showLoader: true, tripsIsLoaded: false});
@@ -1707,6 +1707,7 @@ class GeotabPage extends React.Component {
                                    type="number"
                         />
                         <SelectField
+                            style = {{paddingLeft:'10px', verticalAlign: 'bottom'}}
                             floatingLabelText="Office zone"
                             value={this.state.officeZone}
                             onChange={this.handleChange}>
@@ -1714,7 +1715,7 @@ class GeotabPage extends React.Component {
                                 return <MenuItem value={index} primaryText={zone.name} />
                             })}
                         </SelectField>
-                        <TextField style = {{paddingLeft:'10px', top: '-17px;'}}
+                        <TextField style = {{paddingLeft:'10px'}}
                                    floatingLabelText="Per mile rate (min/km)"
                                    floatingLabelFixed={true}
                                    onChange={(e)=> this.setState({mileRate:e.target.value})}
