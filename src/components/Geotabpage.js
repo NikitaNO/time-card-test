@@ -22,7 +22,9 @@ import {
 
 let zone, allZones, retrievedZones,
     dateCount = 0,
-    isLoadedData = false;
+    isLoadedData = false,
+    isFirstLoad = false,
+    isChangedDate = false;
 
 
 class GeotabPage extends React.Component {
@@ -41,13 +43,14 @@ class GeotabPage extends React.Component {
             startDate: moment().startOf('isoWeek'),
             endDate: moment().endOf('isoWeek'),
             startDateOriginal: moment().startOf('isoWeek'),
+            endDateOriginal: moment().endOf('isoWeek'),
             users: [],
             devices: [],
             savedTrips: [],
             usersMap: {},
             devicesMap: {},
-            trips: null,
-            tableTrips: null,
+            trips: [],
+            tableTrips: [],
             usersLoaded: false,
             createdReport: false,
             openSettings: false,
@@ -66,9 +69,11 @@ class GeotabPage extends React.Component {
             settingsId: '',
             openMap:false,
             isExcel: false,
+            isDownloadExcel: false,
             tripsIsLoaded: false,
             isRenderedData: false,
             showLoader: false,
+            showInfiniteLoader: false,
             groups: [],
             zones: [],
             zone: null,
@@ -138,8 +143,8 @@ class GeotabPage extends React.Component {
                 onOptionClick: this.onOptionClick
             }).on("change", function(evt){
 
-                var val = $(this).val();
-                self.setState({selectedUserIds: val});
+                // var val = $(this).val();
+                // self.setState({selectedUserIds: val});
                 // self.makeReport(true, false);
 
                 // let changeSelectOptions = setInterval(() => {
@@ -395,8 +400,8 @@ class GeotabPage extends React.Component {
     };
 
     createTable = () => {
-        this.setState({isExcel:true, showLoader: true});
-        this.makeReport(false, true)
+        this.setState({isExcel:true, showLoader: true, isDownloadExcel: true});
+        this.downloadExcelFile();
     };
 
     downloadExcelFile = () => {
@@ -410,7 +415,7 @@ class GeotabPage extends React.Component {
         });
         promise
             .then(result => {
-                let table = $("#table_excel");
+                let table = $("#table");
 
                 table.table2excel({
                     exclude: ".noExl",
@@ -418,7 +423,7 @@ class GeotabPage extends React.Component {
                     fileName: `time-card-${this.state.startDate.format('YYYY-MM-DD')}-${this.state.endDate.format('YYYY-MM-DD')}`
                 });
 
-                this.setState({isExcel:false, showLoader: false});
+                this.setState({isExcel:false, showLoader: false, isDownloadExcel: false});
             });
     }
 
@@ -449,15 +454,22 @@ class GeotabPage extends React.Component {
     };
 
     makeReport = (fromChange, isFullPeriod) => {
-        this.setState({showLoader: true, tripsIsLoaded: false});
+        this.setState({showLoader: dateCount < 1, showInfiniteLoader: dateCount > 0, tripsIsLoaded: false});
         let zoneTypeNames = retrievedZones;
 
         if (isFullPeriod) {
-            this.setState({createdReport:false, tableTrips: null});
-        } else {
-            this.setState({createdReport:false, trips: null, tableTrips: null});
+            this.setState({createdReport:false, tableTrips: []});
         }
-
+        if (moment(this.state.startDate).toISOString() !== moment(this.state.startDateOriginal).toISOString() ||
+                moment(this.state.endDate).toISOString() !== moment(this.state.endDateOriginal).toISOString()) {
+            this.setState({
+                trips: [],
+                savedTrips: [],
+                startDateOriginal: this.state.startDate,
+                endDateOriginal: this.state.endDate
+            })
+            isChangedDate = true;
+        }
 
         var users = [], devices = [], usersIds = [], usersForSelect = [], selectedUserIds = [], driverChanges = [];
 
@@ -469,6 +481,11 @@ class GeotabPage extends React.Component {
             fromDate = moment(this.state.startDate).toISOString()
             toDate = moment(this.state.endDate).toISOString()
         } else {
+            if (moment(this.state.startDate).add(dateCount, 'days').endOf('day').toISOString() > this.state.endDate.toISOString()) {
+                this.setState({showLoader: false, showInfiniteLoader: false, tripsIsLoaded: true});
+                onDataLoaded();
+                return true;
+            }
             fromDate = moment(this.state.startDate).add(dateCount, 'days').toISOString()
             toDate = moment(this.state.startDate).add(dateCount, 'days').endOf('day').toISOString()
         }
@@ -489,400 +506,451 @@ class GeotabPage extends React.Component {
         ];
         timeCard.api.multiCall(calls)
             .then(res => {
-                devices = res[0];
-                users = res[1];
-                driverChanges = res[2];
-                
-                if (driverChanges.length === 0) {
-                    this.setState({isExcel:true, showLoader: false});
-                    return;
-                }
+                if (!isChangedDate) {
+                    devices = res[0];
+                    users = res[1];
+                    driverChanges = res[2];
 
-                var now = new Date();
-
-                users = users.filter(user => {
-                    return new Date(user.activeTo) > now
-                });
-
-                usersForSelect = users.map(user => {
-                    return {
-                        name: `${user.firstName} ${user.lastName}`,
-                        value: user.id,
-                        checked: true
+                    if (driverChanges.length === 0) {
+                        this.setState({isExcel: true, showLoader: false});
+                        return isLoadedData = true;
                     }
-                });
-                usersIds = users.map(user => {
-                    return user.id
-                });
 
-                if (!fromChange) {
+                    var now = new Date();
+
+                    users = users.filter(user => {
+                        return new Date(user.activeTo) > now
+                    });
+
+                    usersForSelect = users.map(user => {
+                        return {
+                            name: `${user.firstName} ${user.lastName}`,
+                            value: user.id,
+                            checked: true
+                        }
+                    });
+                    usersIds = users.map(user => {
+                        return user.id
+                    });
+
                     selectedUserIds = usersIds;
-                    this.setState({selectedUserIds: usersIds})
-                    $('select[multiple]').multiselect('loadOptions', usersForSelect);
-                } else {
-                    selectedUserIds = this.state.selectedUserIds;
-                }
-
-                if (selectedUserIds === null) {
-                    this.setState({isExcel:true, showLoader: false});
-                    return;
-                }
-
-                $('.ms-options').find('ul').find('li input').keyup(function (event) {
-                    if (event.which === 32 && !isLoadedData) {
-                        event.preventDefault();
+                    // this.setState({selectedUserIds: usersIds})
+                    if (!isFirstLoad) {
+                        $('select[multiple]').multiselect('loadOptions', usersForSelect);
+                        isFirstLoad = true;
                     }
-                });
 
-                const usersMap = users.reduce((usersMap, user)=> {
-                    usersMap[user.id] = user;
-                    return usersMap
-                }, {});
+                    // if (selectedUserIds === null) {
+                    //     this.setState({isExcel:true, showLoader: false});
+                    //     return;
+                    // }
 
-                this.setState({groups: res[3]});
-
-                const groupsMap = this.state.groups.reduce((groupsMap,group)=>{
-                    groupsMap[group.id] = group;
-                    return groupsMap
-                } , {});
-
-                const devicesMap = devices.reduce((devicesMap, device)=> {
-                    devicesMap[device.id] = device;
-                    return devicesMap
-                }, {});
-
-                const today = new Date();
-                this.setState({devicesMap, usersMap});
-                this.setState({groupsMap: groupsMap});
-
-                let driverChangesByDriver = _.groupBy(driverChanges, (driverChange)=> {
-                    driverChange.dateString = new Date(driverChange.dateTime).toLocaleDateString();
-                    return driverChange.driver.id
-                });
-
-                delete driverChangesByDriver.undefined;
-
-                let tempObj = {};
-                selectedUserIds.forEach(id => {
-                    if (id in driverChangesByDriver) {
-                        tempObj[id] = driverChangesByDriver[id]
-                    }
-                });
-
-                driverChangesByDriver = tempObj;
-                for (let key in driverChangesByDriver) {
-                    driverChangesByDriver[key] = _.groupBy(driverChangesByDriver[key], (driverChange)=> {
-                        driverChange.driver = usersMap[driverChange.driver.id];
-                        driverChange.device = devicesMap[driverChange.device.id];
-                        driverChange.address = '';
-                        driverChange.googleMapsAddress = '';
-                        return driverChange.dateString;
-                    })
-                }
-                for (let key in driverChangesByDriver) {
-                    for (let k in driverChangesByDriver[key]) {
-                        driverChangesByDriver[key][k] = {driverChanges: driverChangesByDriver[key][k]};
-                        driverChangesByDriver[key][k].diff = 0;
-                        driverChangesByDriver[key][k].logs = 0;
-                        driverChangesByDriver[key][k].wrong = false;
-
-                        if (!driverChangesByDriver[key][k].driverId) {
-                            if (driverChangesByDriver[key][k].driverChanges.length > 0 &&
-                                driverChangesByDriver[key][k].driverChanges[0]) {
-                                driverChangesByDriver[key][k].driverId = driverChangesByDriver[key][k].driverChanges[0].driver.id
-                            }
+                    $('.ms-options').find('ul').find('li input').keyup(function (event) {
+                        if (event.which === 32 && !isLoadedData) {
+                            event.preventDefault();
                         }
+                    });
 
-                        if (new Date(driverChangesByDriver[key][k].driverChanges[0].dateTime).toDateString() == today.toDateString()) {
-                            driverChangesByDriver[key][k].today = true
-                        } else driverChangesByDriver[key][k].today = false;
-                        let changes = driverChangesByDriver[key][k].driverChanges;
-                        for (let i = 0; i < changes.length; i++) {
-                            driverChangesByDriver[key][k].logs++;
-                            // console.log(driverChangesByDriver[key][k], 'DIFFF');
-                            if (i + 1 == changes.length) {
-                                driverChangesByDriver[key][k].wrong = true;
-                                if (!driverChangesByDriver[key][k].today)
-                                    driverChangesByDriver[key][k].diff += moment(changes[i].dateTime).endOf('day') - moment(changes[i].dateTime);
-                                i++
-                            } else {
-                                driverChangesByDriver[key][k].diff += moment(changes[i + 1].dateTime) - moment(changes[i].dateTime);
-                                i++
-                            }
+                    const usersMap = users.reduce((usersMap, user)=> {
+                        usersMap[user.id] = user;
+                        return usersMap
+                    }, {});
+
+                    this.setState({groups: res[3]});
+
+                    const groupsMap = this.state.groups.reduce((groupsMap, group)=> {
+                        groupsMap[group.id] = group;
+                        return groupsMap
+                    }, {});
+
+                    const devicesMap = devices.reduce((devicesMap, device)=> {
+                        devicesMap[device.id] = device;
+                        return devicesMap
+                    }, {});
+
+                    const today = new Date();
+                    this.setState({devicesMap, usersMap});
+                    this.setState({groupsMap: groupsMap});
+
+                    let driverChangesByDriver = _.groupBy(driverChanges, (driverChange)=> {
+                        driverChange.dateString = new Date(driverChange.dateTime).toLocaleDateString();
+                        return driverChange.driver.id
+                    });
+
+                    delete driverChangesByDriver.undefined;
+
+                    let tempObj = {};
+                    selectedUserIds.forEach(id => {
+                        if (id in driverChangesByDriver) {
+                            tempObj[id] = driverChangesByDriver[id]
                         }
-                    }
-                }
+                    });
 
-                let resultArray = [];
-                for (let key in driverChangesByDriver) {
-                    resultArray.push(driverChangesByDriver[key]);
-                }
-                resultArray = resultArray.map(dayChanges => {
-                    let arr = [];
-                    for (let key in dayChanges) {
-                        arr.push(dayChanges[key]);
-                    }
-                    return arr;
-                });
-
-
-
-                let trips = [];
-                for (let tripsCount = 0; tripsCount < resultArray.length; tripsCount++) {
-                    for (let driverCount = 0; driverCount < resultArray[tripsCount].length; driverCount++) {
-                        trips.push(resultArray[tripsCount][driverCount]);
-                    }
-                }
-
-
-
-
-                /*
-                 *
-                 *
-                 *
-                 *
-                 *
-                 *
-                 *
-                 *
-                 * */
-                let logRecordCalls = [];
-
-                for (let i = 0; i < trips.length; i++) {
-                    for (let n = 0; n < trips[i].driverChanges.length; n++) {
-                        let toDate = moment(trips[i].driverChanges[n].dateTime).add(15, 'minutes').toISOString();
-                        let query = {
-                            method: 'Get',
-                            params: {
-                                typeName: 'LogRecord',
-                                search: {
-                                    fromDate: trips[i].driverChanges[n].dateTime,
-                                    toDate: toDate,
-                                    deviceSearch: {
-                                        id: trips[i].driverChanges[n].device.id
-                                    }
-                                },
-                                resultLimit: 1
-                            }
-                        };
-                        logRecordCalls.push(query)
-                    }
-                }
-
-                timeCard.api.call('ExecuteMultiCall', {
-                    calls: logRecordCalls
-                })
-                    .then(res => {
-                        console.log(res)
-                        trips.forEach((trip, index) => {
-                            trip.logRecords = [];
-                            trip.driverChanges.forEach((change, index) => {
-                                trip.logRecords.push(res[index]);
-                            })
-                            res.splice(0, trip.driverChanges.length);
+                    driverChangesByDriver = tempObj;
+                    for (let key in driverChangesByDriver) {
+                        driverChangesByDriver[key] = _.groupBy(driverChangesByDriver[key], (driverChange)=> {
+                            driverChange.driver = usersMap[driverChange.driver.id];
+                            driverChange.device = devicesMap[driverChange.device.id];
+                            driverChange.address = '';
+                            driverChange.googleMapsAddress = '';
+                            return driverChange.dateString;
                         })
-                        console.log(trips)
+                    }
+                    for (let key in driverChangesByDriver) {
+                        for (let k in driverChangesByDriver[key]) {
+                            driverChangesByDriver[key][k] = {driverChanges: driverChangesByDriver[key][k]};
+                            driverChangesByDriver[key][k].diff = 0;
+                            driverChangesByDriver[key][k].logs = 0;
+                            driverChangesByDriver[key][k].wrong = false;
 
-                        let promises = [];
-                        trips.forEach((trip, index) => {
-                            let coordinates = [];
-                            for (let i = 0; i < trip.logRecords.length; i++) {
-                                if (trip.logRecords[i]) {
-                                    let coords = trip.logRecords[i];
-                                    if (Array.isArray(trip.logRecords[i])) coords = trip.logRecords[i][0];
-                                    coordinates.push({"x": coords.longitude, "y": coords.latitude});
+                            if (!driverChangesByDriver[key][k].driverId) {
+                                if (driverChangesByDriver[key][k].driverChanges.length > 0 &&
+                                    driverChangesByDriver[key][k].driverChanges[0]) {
+                                    driverChangesByDriver[key][k].driverId = driverChangesByDriver[key][k].driverChanges[0].driver.id
                                 }
                             }
+
+                            if (new Date(driverChangesByDriver[key][k].driverChanges[0].dateTime).toDateString() == today.toDateString()) {
+                                driverChangesByDriver[key][k].today = true
+                            } else driverChangesByDriver[key][k].today = false;
+                            let changes = driverChangesByDriver[key][k].driverChanges;
+                            for (let i = 0; i < changes.length; i++) {
+                                driverChangesByDriver[key][k].logs++;
+                                // console.log(driverChangesByDriver[key][k], 'DIFFF');
+                                if (i + 1 == changes.length) {
+                                    driverChangesByDriver[key][k].wrong = true;
+                                    if (!driverChangesByDriver[key][k].today)
+                                        driverChangesByDriver[key][k].diff += moment(changes[i].dateTime).endOf('day') - moment(changes[i].dateTime);
+                                    i++
+                                } else {
+                                    driverChangesByDriver[key][k].diff += moment(changes[i + 1].dateTime) - moment(changes[i].dateTime);
+                                    i++
+                                }
+                            }
+                        }
+                    }
+
+                    let resultArray = [];
+                    for (let key in driverChangesByDriver) {
+                        resultArray.push(driverChangesByDriver[key]);
+                    }
+                    resultArray = resultArray.map(dayChanges => {
+                        let arr = [];
+                        for (let key in dayChanges) {
+                            arr.push(dayChanges[key]);
+                        }
+                        return arr;
+                    });
+
+
+                    let trips = [];
+                    for (let tripsCount = 0; tripsCount < resultArray.length; tripsCount++) {
+                        for (let driverCount = 0; driverCount < resultArray[tripsCount].length; driverCount++) {
+                            trips.push(resultArray[tripsCount][driverCount]);
+                        }
+                    }
+
+
+                    /*
+                     *
+                     *
+                     *
+                     *
+                     *
+                     *
+                     *
+                     *
+                     * */
+                    let logRecordCalls = [];
+
+                    for (let i = 0; i < trips.length; i++) {
+                        for (let n = 0; n < trips[i].driverChanges.length; n++) {
+                            let toDate = moment(trips[i].driverChanges[n].dateTime).add(15, 'minutes').toISOString();
                             let query = {
-                                method: 'GetAddresses',
+                                method: 'Get',
                                 params: {
-                                    coordinates: coordinates,
-                                    isMovingAddresses: true
+                                    typeName: 'LogRecord',
+                                    search: {
+                                        fromDate: trips[i].driverChanges[n].dateTime,
+                                        toDate: toDate,
+                                        deviceSearch: {
+                                            id: trips[i].driverChanges[n].device.id
+                                        }
+                                    },
+                                    resultLimit: 1
                                 }
                             };
-                            promises.push(query);
-                        })
+                            logRecordCalls.push(query)
+                        }
+                    }
 
-                        timeCard.api.call('ExecuteMultiCall', {
-                            calls: promises
-                        })
-                            .then(res => {
-                                console.log(res);
-
-
-                                trips.forEach((trip, index) => {
-                                    trip.addresses = res[index];
-                                    // res.splice(0, trip.driverChanges.length);
+                    timeCard.api.call('ExecuteMultiCall', {
+                        calls: logRecordCalls
+                    })
+                        .then(res => {
+                            console.log(res)
+                            trips.forEach((trip, index) => {
+                                trip.logRecords = [];
+                                trip.driverChanges.forEach((change, index) => {
+                                    trip.logRecords.push(res[index]);
                                 })
-                                console.log(trips)
+                                res.splice(0, trip.driverChanges.length);
+                            })
+                            console.log(trips)
+
+                            let promises = [];
+                            trips.forEach((trip, index) => {
+                                let coordinates = [];
+                                for (let i = 0; i < trip.logRecords.length; i++) {
+                                    if (trip.logRecords[i]) {
+                                        let coords = trip.logRecords[i];
+                                        if (Array.isArray(trip.logRecords[i])) coords = trip.logRecords[i][0];
+                                        coordinates.push({"x": coords.longitude, "y": coords.latitude});
+                                    }
+                                }
+                                let query = {
+                                    method: 'GetAddresses',
+                                    params: {
+                                        coordinates: coordinates,
+                                        isMovingAddresses: true
+                                    }
+                                };
+                                promises.push(query);
+                            })
+
+                            timeCard.api.call('ExecuteMultiCall', {
+                                calls: promises
+                            })
+                                .then(res => {
+                                    console.log(res);
 
 
-                                trips.forEach((trip, tripIndex) => {
-                                    if (!trip.mileageExpense) trip.mileageExpense = 0;
-                                    trip.totalHours = 0;
+                                    trips.forEach((trip, index) => {
+                                        trip.addresses = res[index];
+                                        // res.splice(0, trip.driverChanges.length);
+                                    })
+                                    console.log(trips)
 
-                                    trip.driverChanges.forEach((change, index) => {
-                                        let foundZones = [];
-                                        if (trip.addresses[index].zones) {
-                                            for (var zoneCount = 0; zoneCount < trip.addresses[index].zones.length; zoneCount++) {
-                                                if (trip.addresses[index].zones[zoneCount].id) {
-                                                    foundZones.push(allZones)
+
+                                    let fromDate = moment(this.state.startDate).add(dateCount, 'days').toISOString()
+                                    let toDate = moment(this.state.startDate).add(dateCount, 'days').endOf('day').toISOString()
+                                    let promises = [];
+                                    trips.forEach((trip, index) => {
+                                        let query = {
+                                            method: 'Get',
+                                            params: {
+                                                typeName: 'Trip',
+                                                search: {
+                                                    UserSearch: {
+                                                        id: trip.driverId
+                                                    },
+                                                    fromDate: fromDate,
+                                                    toDate: toDate
+                                                },
+                                            }
+                                        };
+                                        promises.push(query);
+                                    })
+
+                                    timeCard.api.call('ExecuteMultiCall', {
+                                        calls: promises
+                                    })
+                                        .then(response => {
+                                            console.log(response)
+                                            trips.forEach((trip, index) => {
+                                                if (response[index] && response[index].length > 0) {
+                                                    trip.tripHistory = response[index][response[index].length - 1]
                                                 }
-                                            }
-                                        }
+                                            })
 
-                                        let isHomeZone = false;
-                                        let isCustomersZone = false;
-                                        let zoneNames = '';
-                                        if (foundZones.length > 0 &&
-                                            trip.addresses[index] && trip.addresses[index].zones) {
 
-                                            let zoneArray = [];
-                                            for (let i = 0; i < foundZones.length; i++) {
-                                                zoneArray = zoneArray.concat(foundZones[i]);
-                                            }
-                                            for (let n = 0; n < zoneArray.length; n++) {
-                                                if (zoneArray[n].zoneTypes.length > 0 &&
-                                                    zoneArray[n].zoneTypes[0] === 'ZoneTypeHomeId') {
-                                                    isHomeZone = true;
+                                            trips.forEach((trip, tripIndex) => {
+                                                if (!trip.mileageExpense) trip.mileageExpense = 0;
+                                                trip.totalHours = 0;
+
+                                                trip.driverChanges.forEach((change, index) => {
+                                                    let foundZones = [];
+                                                    if (trip.addresses[index].zones) {
+                                                        for (var zoneCount = 0; zoneCount < trip.addresses[index].zones.length; zoneCount++) {
+                                                            if (trip.addresses[index].zones[zoneCount].id) {
+                                                                foundZones.push(allZones)
+                                                            }
+                                                        }
+                                                    }
+
+                                                    let isHomeZone = false;
+                                                    let isCustomersZone = false;
+                                                    let zoneNames = '';
+                                                    if (foundZones.length > 0 &&
+                                                        trip.addresses[index] && trip.addresses[index].zones) {
+
+                                                        let zoneArray = [];
+                                                        for (let i = 0; i < foundZones.length; i++) {
+                                                            zoneArray = zoneArray.concat(foundZones[i]);
+                                                        }
+                                                        for (let n = 0; n < zoneArray.length; n++) {
+                                                            if (zoneArray[n].zoneTypes.length > 0 &&
+                                                                zoneArray[n].zoneTypes[0] === 'ZoneTypeHomeId') {
+                                                                isHomeZone = true;
+                                                            }
+                                                        }
+
+                                                        if (zoneArray.length > 0) {
+                                                            zoneNames = ' / ';
+                                                            for (let zoneNameCount = 0; zoneNameCount < zoneArray.length; zoneNameCount++) {
+                                                                (zoneNameCount + 1) === zoneArray.length ?
+                                                                    zoneNames += zoneArray[zoneNameCount].name :
+                                                                    zoneNames += zoneArray[zoneNameCount].name + ', ';
+                                                            }
+                                                        } else {
+                                                            change.brokenZone = true;
+                                                        }
+
+                                                        for (let i = 0; i < trip.addresses[index].zones.length; i++) {
+                                                            for (let n = 0; n < this.state.customerZones.length; n++) {
+                                                                if (trip.addresses[index].zones[i].id === this.state.customerZones[n]) {
+                                                                    isCustomersZone = true;
+                                                                }
+                                                            }
+                                                        }
+                                                        change.zones = trip.addresses[index].zones;
+                                                    }
+                                                    change.isCustomerZone = isCustomersZone;
+                                                    change.isHomeZone = isHomeZone;
+                                                    change.address = trip.addresses[index] ? trip.addresses[index].formattedAddress + zoneNames : 'No address';
+                                                    change.googleMapsAddress = trip.addresses[index] ? trip.addresses[index].formattedAddress : '';
+
+                                                    let lastKeyOut = trip.driverChanges.length > 1 ?
+                                                        (trip.driverChanges.length) % 2 === 0 ? trip.driverChanges[trip.driverChanges.length - 1] : trip.driverChanges[trip.driverChanges.length - 2]
+                                                        : null;
+                                                    let lastLogRecord = trip.logRecords.length > 1 ?
+                                                        (trip.logRecords.length) % 2 === 0 ? trip.logRecords[trip.logRecords.length - 1] : trip.logRecords[trip.logRecords.length - 2]
+                                                        : null;
+
+                                                    if (lastKeyOut !== null && isCustomersZone) {
+                                                        if (trip.tripHistory && trip.tripHistory.stop > lastKeyOut.dateTime) {
+                                                            trip.mileageExpense = this.checkDistanceForZoneWithAddresses(trip.tripHistory.stopPoint.y,
+                                                                trip.tripHistory.stopPoint.x, change, zoneTypeNames);
+                                                        } else {
+                                                            trip.mileageExpense = this.checkDistanceForZoneWithAddresses(lastLogRecord.latitude,
+                                                                lastLogRecord.longitude, change, zoneTypeNames);
+                                                        }
+                                                    }
+
+                                                    // if ((index + 1) === trip.driverChanges.length) {
+                                                    //     if ((index + 1) % 2 === 0 && isCustomersZone) {
+                                                    //         trip.mileageExpense = this.checkDistanceForZoneWithAddresses(trip.logRecords[index].latitude,
+                                                    //             trip.logRecords[index].longitude, change, zoneTypeNames);
+                                                    //     } else {
+                                                    //         if (trip.logRecords[index - 1]) {
+                                                    //             trip.mileageExpense = this.checkDistanceForZoneWithAddresses(trip.logRecords[index - 1].latitude,
+                                                    //                 trip.logRecords[index - 1].longitude, change, zoneTypeNames);
+                                                    //         }
+                                                    //     }
+                                                    // }
+
+                                                })
+
+                                                let changes = trip.driverChanges;
+                                                for (let i = 0; i < changes.length; i++) {
+                                                    // if (changes[i].isCustomerZone) {
+                                                    if (i + 1 == changes.length) {
+                                                        if (!trip.today)
+                                                            trip.totalHours += moment(changes[i].dateTime).endOf('day') - moment(changes[i].dateTime);
+                                                        i++
+                                                    } else {
+                                                        trip.totalHours += moment(changes[i + 1].dateTime) - moment(changes[i].dateTime);
+                                                        i++
+                                                    }
+                                                    // }
                                                 }
-                                            }
 
-                                            if (zoneArray.length > 0) {
-                                                zoneNames = ' / ';
-                                                for (let zoneNameCount = 0; zoneNameCount < zoneArray.length; zoneNameCount++) {
-                                                    (zoneNameCount + 1) === zoneArray.length ?
-                                                        zoneNames += zoneArray[zoneNameCount].name :
-                                                        zoneNames += zoneArray[zoneNameCount].name + ', ';
-                                                }
-                                            } else {
-                                                change.brokenZone = true;
-                                            }
+                                            })
 
-                                            for (let i = 0; i < trip.addresses[index].zones.length; i++) {
-                                                for (let n = 0; n < this.state.customerZones.length; n++) {
-                                                    if (trip.addresses[index].zones[i].id === this.state.customerZones[n]) {
-                                                        isCustomersZone = true;
+
+                                            for (let i = 0; i < trips.length; i++) {
+                                                // console.log(newTrips[i]);
+                                                trips[i].excelTableDriverChanges = [];
+                                                for (let m = 0; m < trips[i].driverChanges.length; m++) {
+                                                    if ((m + 1) % 2 !== 0) {
+                                                        trips[i].excelTableDriverChanges.push([trips[i].driverChanges[m],
+                                                            trips[i].driverChanges[m + 1] ? trips[i].driverChanges[m + 1] : null]);
                                                     }
                                                 }
                                             }
-                                            change.zones = trip.addresses[index].zones;
-                                        }
-                                        change.isCustomerZone = isCustomersZone;
-                                        change.isHomeZone = isHomeZone;
-                                        change.address = trip.addresses[index] ? trip.addresses[index].formattedAddress + zoneNames : 'No address';
-                                        change.googleMapsAddress = trip.addresses[index] ? trip.addresses[index].formattedAddress : '';
-
-
-                                        if ((index + 1) === trip.driverChanges.length) {
-                                            if ((index + 1) % 2 === 0 && isCustomersZone) {
-                                                trip.mileageExpense = this.checkDistanceForZoneWithAddresses(trip.logRecords[index].latitude,
-                                                    trip.logRecords[index].longitude, change, zoneTypeNames);
+                                            if (isFullPeriod) {
+                                                this.setState({
+                                                    tableTrips: trips,
+                                                    createdReport: true,
+                                                    usersLoaded: true,
+                                                    tripsIsLoaded: true
+                                                });
+                                                this.downloadExcelFile()
+                                                onDataLoaded();
                                             } else {
-                                                if (trip.logRecords[index - 1]) {
-                                                    trip.mileageExpense = this.checkDistanceForZoneWithAddresses(trip.logRecords[index - 1].latitude,
-                                                        trip.logRecords[index - 1].longitude, change, zoneTypeNames);
-                                                }
+                                                let loadedTripsData = JSON.parse(JSON.stringify(this.state.trips));
+                                                loadedTripsData = loadedTripsData.concat(trips);
+                                                dateCount = dateCount + 1;
+                                                this.setState({
+                                                    trips: loadedTripsData,
+                                                    savedTrips: loadedTripsData,
+                                                    createdReport: true,
+                                                    showLoader: false,
+                                                    usersLoaded: true,
+                                                    isExcel: false,
+                                                    tripsIsLoaded: true
+                                                });
+                                                this.displayOnlySelectedDrivers();
+                                                this.makeReport(false, false);
                                             }
-                                        }
-
-                                    })
-
-                                    let changes = trip.driverChanges;
-                                    for (let i = 0; i < changes.length; i++) {
-                                        // if (changes[i].isCustomerZone) {
-                                        if (i + 1 == changes.length) {
-                                            if (!trip.today)
-                                                trip.totalHours += moment(changes[i].dateTime).endOf('day') - moment(changes[i].dateTime);
-                                            i++
-                                        } else {
-                                            trip.totalHours += moment(changes[i + 1].dateTime) - moment(changes[i].dateTime);
-                                            i++
-                                        }
-                                        // }
-                                    }
-
+                                        })
                                 })
+                                .catch(err => {
+                                    console.log(err);
+                                    onDataLoaded();
+                                })
+                        })
+                        .catch(err => {
+                            console.log(err);
+                            onDataLoaded();
+                        })
+
+                    /*
+                     *
+                     *
+                     *
+                     *
+                     *
+                     *
+                     *
+                     * */
 
 
-                                for (let i = 0; i < trips.length; i++) {
-                                    // console.log(newTrips[i]);
-                                    trips[i].excelTableDriverChanges = [];
-                                    for (let m = 0; m < trips[i].driverChanges.length; m++) {
-                                        if ((m + 1) % 2 !== 0) {
-                                            trips[i].excelTableDriverChanges.push([trips[i].driverChanges[m],
-                                                trips[i].driverChanges[m + 1] ? trips[i].driverChanges[m + 1] : null]);
-                                        }
-                                    }
-                                }
-                                if (isFullPeriod) {
-                                    this.setState({
-                                        tableTrips:trips,
-                                        createdReport: true,
-                                        usersLoaded: true,
-                                        tripsIsLoaded: true
-                                    });
-                                    this.downloadExcelFile()
-                                } else {
-                                    this.setState({
-                                        trips,
-                                        createdReport: true,
-                                        showLoader: false,
-                                        usersLoaded: true,
-                                        isExcel:false,
-                                        tripsIsLoaded: true
-                                    });
-                                }
-                                onDataLoaded();
-
-                            })
-                            .catch(err => {
-                                console.log(err);
-                                onDataLoaded();
-                            })
-                    })
-                    .catch(err => {
-                        console.log(err);
-                        onDataLoaded();
-                    })
-
-                /*
-                 *
-                 *
-                 *
-                 *
-                 *
-                 *
-                 *
-                 * */
-
-
-
-                // let newTrips = [];
-                // this.setState({createdReport: false, isExcel:true});
-                // this.recursivlyGetDistance(0, trips[0], trips, newTrips, zoneTypeNames,
-                //     this.getDistance(trips[0], newTrips, zoneTypeNames))
-                //     .then(result => {
-                //         console.log('RESULT!!!', newTrips);
-                //         for (let i = 0; i < newTrips.length; i++) {
-                //             // console.log(newTrips[i]);
-                //             newTrips[i].excelTableDriverChanges = [];
-                //             for (let m = 0; m < newTrips[i].driverChanges.length; m++) {
-                //                 if ((m + 1) % 2 !== 0) {
-                //                     newTrips[i].excelTableDriverChanges.push([newTrips[i].driverChanges[m],
-                //                         newTrips[i].driverChanges[m + 1] ? newTrips[i].driverChanges[m + 1] : null]);
-                //                 }
-                //             }
-                //         }
-                //         if (isFullPeriod) {
-                //             this.setState({tableTrips:newTrips,createdReport: true, usersLoaded: true, tripsIsLoaded: true});
-                //             this.downloadExcelFile()
-                //         } else {
-                //             this.setState({trips:newTrips,createdReport: true, showLoader: false, usersLoaded: true, isExcel:false, tripsIsLoaded: true});
-                //         }
-                //         isLoadedData = true;
-                //     });
+                    // let newTrips = [];
+                    // this.setState({createdReport: false, isExcel:true});
+                    // this.recursivlyGetDistance(0, trips[0], trips, newTrips, zoneTypeNames,
+                    //     this.getDistance(trips[0], newTrips, zoneTypeNames))
+                    //     .then(result => {
+                    //         console.log('RESULT!!!', newTrips);
+                    //         for (let i = 0; i < newTrips.length; i++) {
+                    //             // console.log(newTrips[i]);
+                    //             newTrips[i].excelTableDriverChanges = [];
+                    //             for (let m = 0; m < newTrips[i].driverChanges.length; m++) {
+                    //                 if ((m + 1) % 2 !== 0) {
+                    //                     newTrips[i].excelTableDriverChanges.push([newTrips[i].driverChanges[m],
+                    //                         newTrips[i].driverChanges[m + 1] ? newTrips[i].driverChanges[m + 1] : null]);
+                    //                 }
+                    //             }
+                    //         }
+                    //         if (isFullPeriod) {
+                    //             this.setState({tableTrips:newTrips,createdReport: true, usersLoaded: true, tripsIsLoaded: true});
+                    //             this.downloadExcelFile()
+                    //         } else {
+                    //             this.setState({trips:newTrips,createdReport: true, showLoader: false, usersLoaded: true, isExcel:false, tripsIsLoaded: true});
+                    //         }
+                    //         isLoadedData = true;
+                    //     });
+                }
             })
         // });
     
@@ -1501,7 +1569,7 @@ class GeotabPage extends React.Component {
                         </div>
                         <DateRangePicker style = {{width: '230px', display: 'inline-block'}} startDate={this.state.startDate} endDate={this.state.endDate}
                                          ranges={this.state.ranges} onEvent={this.handleEvent}>
-                            <Button className="selected-date-range-btn" style={{width:'100%'}}>
+                            <Button className="selected-date-range-btn" style={{width:'215px'}}>
                                 <div className="pull-left"><Glyphicon glyph="calendar" /></div>
                                 <div className="pull-right">
 									<span>
@@ -1516,18 +1584,9 @@ class GeotabPage extends React.Component {
                                       onClick = {() => this.createTable()}/>
                         <RaisedButton style = {buttonStyle} disabled = {!this.state.usersLoaded} label = 'Settings'
                                       onClick = {() => this.setState({openSettings: true})}/>
-
-                        <RaisedButton style = {buttonStyle}
-                                      disabled = {moment(this.state.startDate).add(dateCount, 'days').toISOString() === this.state.startDate.toISOString()}
-                                      label = 'Previous Day'
-                                      onClick = {() => this.loadPrevDay()}/>
-                        <RaisedButton style = {buttonStyle}
-                                      disabled = {moment(this.state.startDate).add(dateCount+1, 'days').endOf('day').toISOString() > this.state.endDate.toISOString()}
-                                      label = 'Next Day'
-                                      onClick = {() => this.loadNextDay()}/>
                     </div>
                     {this.state.trips.length ?
-                        <table id = 'table' style = {this.state.isExcel ? {display: 'none',textAlign: 'center'}: {display:'table',textAlign: 'center'}}>
+                        <table id = 'table' style = {{display:'table',textAlign: 'center'}}>
                             <thead style = {{textAlign: 'center'}}>
                             <tr className="table-head">
                                 <th style = {{textAlign: 'center', padding: '7px'}}>Driver</th>
@@ -1543,7 +1602,7 @@ class GeotabPage extends React.Component {
                                 <th style = {{textAlign: 'center', padding: '7px'}}>Total Hours</th>
                                 <th style = {{textAlign: 'center', padding: '7px'}}>Mileage Expense</th>
                                 <th style = {{textAlign: 'center', padding: '7px'}}>Total Hours with Mileage</th>
-                                {this.state.isExcel && <th style = {{textAlign: 'center', padding: '7px'}}>Groups</th>}
+                                {this.state.isDownloadExcel && <th style = {{textAlign: 'center', padding: '7px'}}>Groups</th>}
                             </tr>
                             </thead>
                             <tbody className="table-body">
@@ -1590,7 +1649,7 @@ class GeotabPage extends React.Component {
                                     <td style = {{padding: '7px'}}>{isForgotToScanOut !== 'forgot to scan' ? this.state.setToDefault && day.driverChanges.length % 2 !== 0 ? overTimeMills < day.totalHours ? moment(overTimeMills).utc().format('HH:mm') : moment(day.totalHours).utc().format('HH:mm') : moment(day.totalHours).utc().format('HH:mm') : '0' + this.state.dayHours + ':00'}</td>
                                     <td style = {{padding: '7px'}}>{day.mileageExpense ? this.parseTime(day.mileageExpense) : '00:00'}</td>
                                     <td style = {{padding: '7px'}}>{this.getTotalHours((day.mileageExpense ? day.mileageExpense : 0), (isForgotToScanOut !== 'forgot to scan' ? this.state.setToDefault && day.driverChanges.length % 2 !== 0 ? overTimeMills < day.totalHours ? moment(overTimeMills).utc().format('HH:mm') : moment(day.totalHours).utc().format('HH:mm') : moment(day.totalHours).utc().format('HH:mm') : '0' + this.state.dayHours + ':00'))}</td>
-                                    {this.state.isExcel && <td>{this.getGroups(day)}</td>}
+                                    {this.state.isDownloadExcel && <td>{this.getGroups(day)}</td>}
                                 </tr>
                             })}
                             </tbody>

@@ -22,11 +22,11 @@ module.exports = {
         ]
     },
     plugins: [
-        new webpack.optimize.UglifyJsPlugin({
-            sourceMap: false,
-            mangle: true,
-            minimize: true,
-            compress: { warnings: false }
-        })
+        // new webpack.optimize.UglifyJsPlugin({
+        //     sourceMap: false,
+        //     mangle: true,
+        //     minimize: true,
+        //     compress: { warnings: false }
+        // })
     ]
 };
